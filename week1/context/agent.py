@@ -427,6 +427,25 @@ class ContextAwareAgent:
             }
         ]
     
+    def _prepare_assistant_message(self, message) -> Dict[str, Any]:
+        """
+        Prepare assistant message for adding to messages list, 
+        filtering out reasoning_content if in NO_REASONING mode
+        
+        Args:
+            message: The assistant message object
+            
+        Returns:
+            Dictionary representation of the message
+        """
+        msg_dict = message.dict() if hasattr(message, 'dict') else message.model_dump()
+        
+        # Remove reasoning_content if in NO_REASONING mode
+        if self.context_mode == ContextMode.NO_REASONING and 'reasoning_content' in msg_dict:
+            msg_dict.pop('reasoning_content')
+            
+        return msg_dict
+    
     def _build_context(self) -> str:
         """
         Build context based on the current mode
@@ -584,13 +603,13 @@ Important: When you have gathered all necessary information and computed the fin
                     final_answer = message.content.split("FINAL ANSWER:")[1].strip()
                     logger.info(f"Final answer found: {final_answer}")
                     # Add the message before breaking
-                    messages.append(message.dict() if hasattr(message, 'dict') else message.model_dump())
+                    messages.append(self._prepare_assistant_message(message))
                     break
                 
                 # Handle tool calls
                 if hasattr(message, 'tool_calls') and message.tool_calls:
                     # Add the assistant message with tool calls
-                    messages.append(message.dict() if hasattr(message, 'dict') else message.model_dump())
+                    messages.append(self._prepare_assistant_message(message))
                     for tool_call in message.tool_calls:
                         function_name = tool_call.function.name
                         function_args = json.loads(tool_call.function.arguments)
@@ -624,7 +643,7 @@ Important: When you have gathered all necessary information and computed the fin
                             })
                 elif message.content:
                     # No tool calls, but there's content - add the message
-                    messages.append(message.dict() if hasattr(message, 'dict') else message.model_dump())
+                    messages.append(self._prepare_assistant_message(message))
                 
                 # Update context for next iteration
                 context = self._build_context()
