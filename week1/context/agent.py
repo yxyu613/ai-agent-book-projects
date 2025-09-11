@@ -309,7 +309,8 @@ class ContextAwareAgent:
     """
     
     def __init__(self, api_key: str, context_mode: ContextMode = ContextMode.FULL, 
-                 provider: str = "siliconflow", model: Optional[str] = None):
+                 provider: str = "siliconflow", model: Optional[str] = None, 
+                 verbose: bool = True):
         """
         Initialize the agent
         
@@ -318,8 +319,10 @@ class ContextAwareAgent:
             context_mode: Context mode for ablation studies
             provider: LLM provider ('siliconflow' or 'doubao')
             model: Optional model override
+            verbose: If True, log full HTTP requests and responses (default: True)
         """
         self.provider = provider.lower()
+        self.verbose = verbose
         
         # Configure client based on provider
         if self.provider == "siliconflow":
@@ -341,7 +344,7 @@ class ContextAwareAgent:
         self.trajectory = AgentTrajectory(context_mode=context_mode)
         self.tools = ToolRegistry()
         
-        logger.info(f"Agent initialized with provider: {self.provider}, model: {self.model}, context mode: {context_mode.value}")
+        logger.info(f"Agent initialized with provider: {self.provider}, model: {self.model}, context mode: {context_mode.value}, verbose: {self.verbose}")
     
     def _get_tools_description(self) -> List[Dict[str, Any]]:
         """Get tool descriptions for the model"""
@@ -452,6 +455,40 @@ class ContextAwareAgent:
         
         return "\n".join(context_parts) if context_parts else ""
     
+    def _log_request_response(self, request_data: Dict[str, Any], response_data: Any, iteration: int):
+        """
+        Log full request and response when in verbose mode
+        
+        Args:
+            request_data: The request payload sent to the API
+            response_data: The response received from the API
+            iteration: Current iteration number
+        """
+        if not self.verbose:
+            return
+            
+        if request_data:
+            print("\n" + "="*80)
+            print(f"📤 ITERATION {iteration} - FULL REQUEST JSON:")
+            print("-"*80)
+            print(json.dumps(request_data, indent=2, ensure_ascii=False))
+        
+        if response_data:
+            print("\n" + "="*80)
+            print(f"📥 ITERATION {iteration} - FULL RESPONSE:")
+            print("-"*80)
+        
+            # Convert response to dict for display
+            if hasattr(response_data, 'model_dump'):
+                response_dict = response_data.model_dump()
+            elif hasattr(response_data, 'dict'):
+                response_dict = response_data.dict()
+            else:
+                response_dict = {"raw_response": str(response_data)}
+
+            print(json.dumps(response_dict, indent=2, ensure_ascii=False))
+            print("="*80 + "\n")
+    
     def _execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """
         Execute a tool and return the result
@@ -511,6 +548,20 @@ Important: When you have gathered all necessary information and computed the fin
             logger.info(f"Iteration {iteration}/{max_iterations}")
             
             try:
+                # Prepare request data for logging
+                request_data = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": 0.3,
+                    "max_tokens": 8192
+                }
+                
+                if self.context_mode != ContextMode.NO_TOOL_CALLS:
+                    request_data["tools"] = self._get_tools_description()
+                    request_data["tool_choice"] = "auto"
+                
+                logger.info(f"Sending request to {self.provider} API")
+
                 # Call the model with tools
                 response = self.client.chat.completions.create(
                     model=self.model,
@@ -521,6 +572,10 @@ Important: When you have gathered all necessary information and computed the fin
                     max_tokens=8192,
                     timeout=180  # Add 180 second timeout for main execution
                 )
+                
+                # Log response if verbose
+                if self.verbose:
+                    self._log_request_response(request_data, response, iteration)
                 
                 message = response.choices[0].message
                 
