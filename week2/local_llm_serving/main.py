@@ -119,21 +119,16 @@ class ToolCallingAgent:
                     logger.info("Install a model with: ollama pull qwen3:0.6b")
                     sys.exit(1)
                 
-                # Select best available model
-                # Prefer models with better tool support
-                preferred_models = ['llama3.1', 'llama3.2', 'mistral-nemo', 'qwen3', 'qwen2.5']
-                model = None
+                # Use qwen3:0.6b as the default model
+                model = "qwen3:0.6b"
                 
-                for pref in preferred_models:
-                    for available in available_models:
-                        if pref in available.lower():
-                            model = available
-                            break
-                    if model:
-                        break
-                
-                if not model:
+                # Check if qwen3:0.6b is available
+                if model not in available_models:
+                    logger.warning(f"Recommended model {model} not found in available models")
+                    logger.info("Install with: ollama pull qwen3:0.6b")
+                    # Fall back to first available model if qwen3:0.6b is not installed
                     model = available_models[0]
+                    logger.info(f"Using fallback model: {model}")
                 
                 logger.info(f"Using Ollama model: {model}")
                 self.agent = OllamaNativeAgent(model=model)

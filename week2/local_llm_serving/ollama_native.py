@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class OllamaNativeAgent:
     """Agent using Ollama's native tool calling support"""
     
-    def __init__(self, model: str = "llama3.1:latest"):
+    def __init__(self, model: str = "qwen3:0.6b"):
         """
         Initialize with a model that supports tool calling
         """
@@ -450,11 +450,9 @@ def test_native_tools():
     print("🔧 Testing Ollama Native Tool Calling")
     print("="*60)
     
-    # Test different models
+    # Test with default model
     models_to_test = [
-        "llama3.1:latest",    # Best tool support
-        "mistral-nemo:latest", # Good tool support
-        "qwen2.5:7b",         # May work with larger sizes
+        "qwen3:0.6b",  # Default model for this project
     ]
     
     for model_name in models_to_test:
@@ -489,11 +487,9 @@ def test_native_tools():
             print(f"❌ Error testing {model_name}: {e}")
     
     print("\n" + "="*60)
-    print("💡 Recommendation:")
-    print("For best tool calling support, use:")
-    print("  1. llama3.1 (8b or larger)")
-    print("  2. mistral-nemo")
-    print("  3. qwen2.5 (7b or larger)")
+    print("💡 Note:")
+    print("This project uses qwen3:0.6b as the default model.")
+    print("Install with: ollama pull qwen3:0.6b")
     print("="*60)
 
 
@@ -520,15 +516,17 @@ def demo():
             client = ollama.Client()
             models = [m['name'] for m in client.list()['models']]
             
-            # Prefer models with good tool support
-            preferred_models = ['llama3.1:latest', 'mistral-nemo:latest', 'qwen2.5:7b']
-            model = next((m for m in preferred_models if any(m in model for model in models)), None)
+            # Use qwen3:0.6b as the default model
+            model = "qwen3:0.6b"
             
-            if model:
-                print(f"Found compatible model: {model}")
+            if model in models:
+                print(f"Using recommended model: {model}")
             else:
-                model = models[0] if models else "llama3.1:latest"
-                print(f"Using model: {model}")
+                print(f"Recommended model {model} not found")
+                print("Install with: ollama pull qwen3:0.6b")
+                # Fall back to first available model
+                model = models[0] if models else "qwen3:0.6b"
+                print(f"Using fallback model: {model}")
                 
             agent = OllamaNativeAgent(model=model)
             

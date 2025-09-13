@@ -70,13 +70,18 @@ def demo_ollama_streaming():
         client = ollama.Client()
         models = [m['name'] for m in client.list()['models']]
         
-        # Prefer models with good tool support
-        preferred = ['llama3.1:latest', 'mistral-nemo:latest', 'qwen2.5:7b']
-        model = next((m for m in preferred if any(m in model for model in models)), models[0] if models else None)
+        # Use qwen3:0.6b as the default model
+        model = "qwen3:0.6b"
         
-        if not model:
-            print("❌ No Ollama models found. Install with: ollama pull llama3.1")
-            return
+        if model not in models:
+            print(f"⚠️ Recommended model {model} not found")
+            print("Install with: ollama pull qwen3:0.6b")
+            if models:
+                model = models[0]
+                print(f"Using fallback model: {model}")
+            else:
+                print("❌ No Ollama models found. Install with: ollama pull qwen3:0.6b")
+                return
         
         print(f"Using model: {model}")
         agent = OllamaNativeAgent(model=model)

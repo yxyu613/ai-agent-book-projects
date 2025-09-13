@@ -35,7 +35,7 @@ That's it! The script automatically detects your platform and uses the appropria
 ## 📋 Prerequisites
 
 ### All Platforms
-- Python 3.8+
+- Python 3.10+
 - `pip install -r requirements.txt`
 
 ### Platform-Specific Setup
@@ -48,10 +48,8 @@ brew install ollama
 # Start Ollama service (in separate terminal)
 ollama serve
 
-# Pull a model with tool support
-ollama pull llama3.1:latest  # Best tool support
-# or
-ollama pull qwen3:0.6b       # Smaller option
+# Download a model
+ollama pull qwen3:0.6b
 ```
 
 #### 🪟 Windows
@@ -67,7 +65,7 @@ ollama pull qwen3:0.6b       # Smaller option
 # From: https://ollama.com/download/windows
 
 # Pull a model
-ollama pull llama3.1:latest
+ollama pull qwen3:0.6b
 ```
 
 #### 🐧 Linux
@@ -85,7 +83,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 systemctl start ollama
 
 # Pull a model
-ollama pull llama3.1:latest
+ollama pull qwen3:0.6b
 ```
 
 ## 🎮 Usage
@@ -275,8 +273,7 @@ No ad-hoc parsing or custom formats - just the standard that works across platfo
 
 ### "No models installed"
 ```bash
-ollama pull llama3.1:latest  # Recommended
-ollama pull qwen3:0.6b       # Smaller alternative
+ollama pull qwen3:0.6b  # Default model used by this project
 ```
 
 ### "CUDA not available" (Linux/Windows)
@@ -290,15 +287,17 @@ python check_compatibility.py
 
 ## 🤝 Supported Models
 
-### Best for Tool Calling:
-- **Llama 3.1/3.2** (8B+) - Excellent tool support
+### Default Model:
+- **Qwen3** (0.6B) - Default model used by this project. Small size with decent tool calling support.
+
+### Other Compatible Models for Tool Calling:
+- **Qwen3** (8B+) - Good tool support
+- **Llama 3.1/3.2** (8B+) - Good tool support
 - **Mistral Nemo** - Great tool calling
-- **Qwen3** (0.6B+) - Works even in small sizes
-- **Qwen2.5** (7B+) - Good tool support
 
 ### For vLLM:
-- Any model supported by vLLM
-- Qwen, Llama, Mistral families recommended
+- Uses Qwen3-0.6B by default
+- Any model supported by vLLM can be configured
 
 ## 📚 How It Works
 
