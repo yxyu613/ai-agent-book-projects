@@ -263,6 +263,7 @@ def run_single_task(agent: ToolCallingAgent, task: str, stream: bool = True):
             thinking_shown = False
             tools_shown = False
             response_started = False
+            last_chunk_type = None
             
             for chunk in agent.chat(task, stream=True):
                 chunk_type = chunk.get("type")
@@ -277,28 +278,30 @@ def run_single_task(agent: ToolCallingAgent, task: str, stream: bool = True):
                 
                 elif chunk_type == "tool_call":
                     if not tools_shown:
-                        print("\n\n💡 Tool Calls:\n")
+                        print("\n\n🔧 Tool Calls:")
                         tools_shown = True
                     # Display tool call info
                     tool_info = content
-                    print(f"  📦 Calling: {tool_info.get('name', 'unknown')}")
-                    print(f"     Args: {tool_info.get('arguments', {})}")
+                    print(f"  → {tool_info.get('name', 'unknown')}: {tool_info.get('arguments', {})}")
+                    # Reset response_started flag after tool calls
+                    response_started = False
                 
                 elif chunk_type == "tool_result":
                     # Display tool result
                     result_str = str(content)
-                    print(f"     ✓ Result: {result_str}")
+                    print(f"    ✓ {result_str}")
+                    # Reset response_started flag after tool results
+                    response_started = False
                 
                 elif chunk_type == "content":
                     if not response_started:
-                        if thinking_shown or tools_shown:
-                            print("\n\n🤖 Response:")
-                            print("-"*40)
-                            print()
+                        # Check if this is content after tool execution
+                        if last_chunk_type in ["tool_result", "tool_call"]:
+                            print("\n🤖 Assistant: ", end="", flush=True)
+                        elif thinking_shown or tools_shown:
+                            print("\n\n🤖 Assistant: ", end="", flush=True)
                         else:
-                            print("🤖 Response:")
-                            print("-"*40)
-                            print()
+                            print("🤖 Assistant: ", end="", flush=True)
                         response_started = True
                     # Stream the actual response content
                     print(content, end="", flush=True)
@@ -306,6 +309,8 @@ def run_single_task(agent: ToolCallingAgent, task: str, stream: bool = True):
                 
                 elif chunk_type == "error":
                     print(f"\n❌ Error: {content}")
+                
+                last_chunk_type = chunk_type
             
             print("\n" + "-"*40)
             
@@ -437,6 +442,7 @@ def interactive_mode(agent: ToolCallingAgent, stream: bool = True):
                 thinking_shown = False
                 tools_shown = False
                 response_started = False
+                last_chunk_type = None
                 
                 for chunk in agent.chat(user_input, stream=True):
                     chunk_type = chunk.get("type")
@@ -455,14 +461,22 @@ def interactive_mode(agent: ToolCallingAgent, stream: bool = True):
                             tools_shown = True
                         tool_info = content
                         print(f"  → {tool_info.get('name', 'unknown')}: {tool_info.get('arguments', {})}")
+                        # Reset response_started flag after tool calls so the next content gets a label
+                        response_started = False
                     
                     elif chunk_type == "tool_result":
                         result_str = str(content)
                         print(f"    ✓ {result_str}")
+                        # Reset response_started flag after tool results
+                        response_started = False
                     
                     elif chunk_type == "content":
+                        # If we're starting a new content section after tool results
                         if not response_started:
-                            if thinking_shown or tools_shown:
+                            if last_chunk_type in ["tool_result", "tool_call"]:
+                                # This is a response after tool execution
+                                print("\n🤖 Assistant: ", end="", flush=True)
+                            elif thinking_shown or tools_shown:
                                 print("\n🤖 Assistant: ", end="", flush=True)
                             else:
                                 print("🤖 Assistant: ", end="", flush=True)
@@ -472,6 +486,8 @@ def interactive_mode(agent: ToolCallingAgent, stream: bool = True):
                     
                     elif chunk_type == "error":
                         print(f"\n❌ Error: {content}")
+                    
+                    last_chunk_type = chunk_type
                 
                 print()  # New line after streaming
             else:

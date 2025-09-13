@@ -139,34 +139,44 @@ def demo_unified_streaming():
         
         # Track what sections we've shown
         sections_shown = set()
+        last_chunk_type = None
         
         for chunk in agent.chat(query, stream=True):
             chunk_type = chunk.get("type")
             content = chunk.get("content", "")
             
-                if chunk_type == "thinking":
-                    if "thinking" not in sections_shown:
-                        print("\n💭 Thinking: ", end="", flush=True)
-                        sections_shown.add("thinking")
-                    # Stream thinking character by character in gray
-                    print(f"\033[90m{content}\033[0m", end="", flush=True)
+            if chunk_type == "thinking":
+                if "thinking" not in sections_shown:
+                    print("\n💭 Thinking: ", end="", flush=True)
+                    sections_shown.add("thinking")
+                # Stream thinking character by character in gray
+                print(f"\033[90m{content}\033[0m", end="", flush=True)
             
             elif chunk_type == "tool_call":
                 if "tools" not in sections_shown:
                     print("\n🔧 Tool Calls:")
                     sections_shown.add("tools")
                 print(f"  → {content['name']}: {content['arguments']}")
+                # Remove response section so it shows again after tools
+                sections_shown.discard("response")
             
             elif chunk_type == "tool_result":
                 result_str = str(content)
                 print(f"    ✓ {result_str}")
+                # Remove response section so it shows again after tools
+                sections_shown.discard("response")
             
             elif chunk_type == "content":
                 if "response" not in sections_shown:
-                    print("\n📝 Response:")
+                    if last_chunk_type in ["tool_result", "tool_call"]:
+                        print("\n📝 Response (after tools):")
+                    else:
+                        print("\n📝 Response:")
                     sections_shown.add("response")
                     print("  ", end="")
                 print(content, end="", flush=True)
+            
+            last_chunk_type = chunk_type
         
         print()  # New line after response
         
