@@ -15,7 +15,7 @@ export default function AttentionModal({ isOpen, onClose, tokens, attentionWeigh
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [transformMethod, setTransformMethod] = useState<'none' | 'log' | 'log10' | 'sqrt' | 'power' | 'power-extreme' | 'exclude-sink'>('power');
+  const [transformMethod, setTransformMethod] = useState<'none' | 'log' | 'log10' | 'sqrt' | 'power' | 'power-extreme' | 'exclude-sink'>('log10');
 
   // Zoom controls
   const handleZoomIn = useCallback(() => {
@@ -396,7 +396,6 @@ export default function AttentionModal({ isOpen, onClose, tokens, attentionWeigh
                 <option value="sqrt" title="Square root - moderate enhancement of small values">Square Root</option>
                 <option value="power" title="Power 0.3 - strong enhancement of small values">Power (0.3)</option>
                 <option value="power-extreme" title="Power 0.1 - extreme enhancement for tiny values">Power (0.1)</option>
-                <option value="adaptive" title="Dynamically adjusts power based on value magnitude">Adaptive</option>
                 <option value="exclude-sink" title="Normalizes without first token to show other token differences">Exclude Sink</option>
               </select>
             </div>

@@ -50,9 +50,12 @@ export default function AttentionPreview({ tokens, attentionWeights, onClick }: 
     }
     maxWeight = maxWeight || 1;
     
-    // Apply power-0.3 transformation for better visualization of small values
+    // Apply log10 transformation for better visualization of small values
     const transformValue = (value: number) => {
-      return Math.pow(value / maxWeight, 0.3);
+      // Base-10 logarithm for intuitive order-of-magnitude understanding
+      const log10Value = Math.log10(1 + value * 1000); // Scale up before log10
+      const log10Max = Math.log10(1 + maxWeight * 1000);
+      return log10Value / log10Max;
     };
     
     const colorScale = (value: number) => {
