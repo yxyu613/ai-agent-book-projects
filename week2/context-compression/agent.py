@@ -218,56 +218,99 @@ TODAY'S DATE: {date_string}"""
     def _handle_windowed_compression(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Apply windowed compression strategy to message history
+        Only compresses when context usage exceeds 80% threshold
         
         Args:
             messages: Current message history
             
         Returns:
-            Messages with compressed history (except last tool result)
+            Messages with compressed history when needed
         """
         if self.compression_strategy != CompressionStrategy.WINDOWED_CONTEXT:
             return messages
         
-        # Find tool messages and compress all except the last one
-        compressed_messages = []
-        tool_messages = []
+        # Check if we should start compressing (80% context usage)
+        context_threshold = Config.CONTEXT_WINDOW_SIZE * 0.8
+        
+        if self.trajectory.prompt_tokens_used <= context_threshold:
+            logger.debug(f"Windowed compression: Context usage below threshold ({self.trajectory.prompt_tokens_used:,}/{context_threshold:.0f} tokens)")
+            return messages  # No compression needed yet
+        
+        logger.info(f"⚠️ Context usage exceeds 80% threshold ({self.trajectory.prompt_tokens_used:,}/{Config.CONTEXT_WINDOW_SIZE} tokens) - Starting compression")
+        
+        # Compression marker to identify already-compressed messages
+        COMPRESSION_MARKER = "[COMPRESSED]"
+        
+        # First, count how many tool messages we have and how many need compression
+        tool_messages_to_compress = []
+        already_compressed_count = 0
         
         for i, msg in enumerate(messages):
             if msg.get('role') == 'tool':
-                tool_messages.append((i, msg))
+                original_content = msg.get('content', '')
+                if original_content.startswith(COMPRESSION_MARKER):
+                    already_compressed_count += 1
+                else:
+                    tool_messages_to_compress.append((i, msg))
         
-        if len(tool_messages) <= 1:
-            return messages  # Nothing to compress
+        total_tool_messages = already_compressed_count + len(tool_messages_to_compress)
         
-        # Compress all but the last tool message
+        if not tool_messages_to_compress:
+            logger.debug(f"Windowed compression: All {total_tool_messages} tool messages already compressed")
+            return messages  # All tool messages already compressed
+        
+        logger.info(f"📊 Compressing {len(tool_messages_to_compress)} uncompressed tool messages (out of {total_tool_messages} total)")
+        
+        # Build the result with compression for all uncompressed tool messages
+        compressed_messages = []
+        compressed_in_this_pass = 0
+        
         for i, msg in enumerate(messages):
-            if msg.get('role') == 'tool' and i != tool_messages[-1][0]:
-                # Compress this tool result
+            if msg.get('role') == 'tool':
                 original_content = msg.get('content', '')
                 
-                # Find the corresponding tool call to get context
-                tool_call_id = msg.get('tool_call_id')
-                query = "Information search"  # Default
-                
-                # Try to find the query from the tool call
-                for call in self.trajectory.tool_calls:
-                    if hasattr(call, 'id') and call.id == tool_call_id:
-                        query = call.arguments.get('query', query)
-                        break
-                
-                compressed = self.compressor.compress_for_history(
-                    original_content,
-                    'search_web',
-                    query,
-                    preserve_citations=True
-                )
-                
-                compressed_messages.append({
-                    **msg,
-                    'content': f"[Compressed from {compressed.original_length} to {compressed.compressed_length} chars]\n{compressed.content}"
-                })
+                # Check if already compressed
+                if original_content.startswith(COMPRESSION_MARKER):
+                    # Already compressed, keep as is
+                    compressed_messages.append(msg)
+                else:
+                    # Compress this tool result
+                    compressed_in_this_pass += 1
+                    
+                    # Find the corresponding tool call to get context
+                    tool_call_id = msg.get('tool_call_id')
+                    query = "Information search"  # Default
+                    
+                    # Try to find the query from the tool call
+                    for call in self.trajectory.tool_calls:
+                        if hasattr(call, 'id') and call.id == tool_call_id:
+                            query = call.arguments.get('query', query)
+                            break
+                    
+                    logger.debug(f"Compressing tool message {compressed_in_this_pass}/{len(tool_messages_to_compress)} at index {i} (query: {query[:50]}...)")
+                    compressed = self.compressor.compress_for_history(
+                        original_content,
+                        'search_web',
+                        query,
+                        preserve_citations=True
+                    )
+                    logger.debug(f"Compressed: {compressed.original_length:,} → {compressed.compressed_length:,} chars")
+                    
+                    # Mark as compressed with clear marker
+                    compressed_content = (
+                        f"{COMPRESSION_MARKER} "
+                        f"[Original: {compressed.original_length:,} chars → Compressed: {compressed.compressed_length:,} chars]\n"
+                        f"{compressed.content}"
+                    )
+                    
+                    compressed_messages.append({
+                        **msg,
+                        'content': compressed_content
+                    })
             else:
                 compressed_messages.append(msg)
+        
+        logger.info(f"✅ Compressed {compressed_in_this_pass} tool messages in this pass")
         
         return compressed_messages
     

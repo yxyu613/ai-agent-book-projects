@@ -45,6 +45,7 @@ This experiment implements and compares 6 different context compression strategi
 - **Description**: Keeps full content for last tool call, compresses older history
 - **Expected Result**: Balance between detail and efficiency
 - **Trade-off**: Recent detail vs. historical compression
+- **Smart Compression**: Only compresses uncompressed messages (marked with [COMPRESSED] to prevent re-compression)
 
 ## Installation
 

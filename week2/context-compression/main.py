@@ -33,7 +33,7 @@ def select_strategy() -> CompressionStrategy:
     print("3. Non-Context-Aware: Combined Summary (concatenate all pages, then summarize once)")
     print("4. Context-Aware Summarization")
     print("5. Context-Aware with Citations")
-    print("6. Windowed Context (full last, compressed history)")
+    print("6. Windowed Context (only compress when approaching context limit)")
     
     while True:
         try:
