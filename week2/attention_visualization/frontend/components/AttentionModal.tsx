@@ -15,7 +15,7 @@ export default function AttentionModal({ isOpen, onClose, tokens, attentionWeigh
   const [isRendering, setIsRendering] = useState(false);
   const [renderError, setRenderError] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [transformMethod, setTransformMethod] = useState<'none' | 'log' | 'sqrt' | 'power' | 'exclude-sink'>('log');
+  const [transformMethod, setTransformMethod] = useState<'none' | 'log' | 'log10' | 'sqrt' | 'power' | 'power-extreme' | 'exclude-sink'>('power');
 
   // Zoom controls
   const handleZoomIn = useCallback(() => {
@@ -50,6 +50,18 @@ export default function AttentionModal({ isOpen, onClose, tokens, attentionWeigh
       case 'power':
         // Power transformation with exponent < 1 to enhance small values
         return Math.pow(value / maxWeight, 0.3); // Cube root-like transformation
+      
+      case 'power-extreme':
+        // Extreme power transformation for very small values
+        // Uses power 0.1 to dramatically enhance tiny attention values
+        return Math.pow(value / maxWeight, 0.1);
+      
+      case 'log10':
+        // Base-10 logarithm for a different scale perspective
+        // Useful for values spanning multiple orders of magnitude
+        const log10Value = Math.log10(1 + value * 1000); // Scale up more before log10
+        const log10Max = Math.log10(1 + maxWeight * 1000);
+        return log10Value / log10Max;
       
       case 'exclude-sink':
         // Exclude first token (attention sink) from normalization
@@ -379,9 +391,12 @@ export default function AttentionModal({ isOpen, onClose, tokens, attentionWeigh
                 title="Choose a transformation to better visualize small attention values"
               >
                 <option value="none" title="Linear scale - shows raw attention values">None</option>
-                <option value="log" title="Logarithmic scale - spreads out small values">Log Scale</option>
+                <option value="log" title="Natural logarithm - spreads out small values">Log (base e)</option>
+                <option value="log10" title="Base-10 logarithm - useful for multiple orders of magnitude">Log₁₀</option>
                 <option value="sqrt" title="Square root - moderate enhancement of small values">Square Root</option>
                 <option value="power" title="Power 0.3 - strong enhancement of small values">Power (0.3)</option>
+                <option value="power-extreme" title="Power 0.1 - extreme enhancement for tiny values">Power (0.1)</option>
+                <option value="adaptive" title="Dynamically adjusts power based on value magnitude">Adaptive</option>
                 <option value="exclude-sink" title="Normalizes without first token to show other token differences">Exclude Sink</option>
               </select>
             </div>
