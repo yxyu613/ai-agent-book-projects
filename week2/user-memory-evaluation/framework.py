@@ -146,14 +146,18 @@ class UserMemoryEvaluationFramework:
             category: Optional filter by category (layer1, layer2, layer3)
             
         Returns:
-            List of test cases
+            List of test cases sorted by test_id
         """
         if not self.test_suite:
             return []
         
         if category:
-            return self.test_suite.get_by_category(category)
-        return self.test_suite.test_cases
+            test_cases = self.test_suite.get_by_category(category)
+        else:
+            test_cases = self.test_suite.test_cases
+        
+        # Return sorted by test_id
+        return sorted(test_cases, key=lambda tc: tc.test_id)
     
     def get_test_case(self, test_id: str) -> Optional[TestCase]:
         """
@@ -290,30 +294,55 @@ class UserMemoryEvaluationFramework:
         
         return report
     
-    def display_test_case_summary(self) -> None:
-        """Display a summary of all test cases."""
+    def display_test_case_summary(self, show_full_titles: bool = True, by_category: bool = True) -> None:
+        """Display a summary of all test cases.
+        
+        Args:
+            show_full_titles: If True, show complete titles without truncation
+            by_category: If True, organize display by category
+        """
         if not self.test_suite:
             console.print("[red]No test cases loaded[/red]")
             return
         
-        table = Table(title="Test Case Summary", show_header=True)
-        table.add_column("Category", style="cyan")
-        table.add_column("Test ID", style="magenta")
-        table.add_column("Title", style="green")
-        table.add_column("Conversations", justify="center")
-        table.add_column("Rounds", justify="center")
-        
-        for test_case in self.test_suite.test_cases:
-            total_rounds = sum(h.rounds for h in test_case.conversation_histories)
-            table.add_row(
-                test_case.category,
-                test_case.test_id,
-                test_case.title[:40] + "..." if len(test_case.title) > 40 else test_case.title,
-                str(len(test_case.conversation_histories)),
-                str(total_rounds)
-            )
-        
-        console.print(table)
+        if by_category:
+            # Display by category
+            categories = ['layer1', 'layer2', 'layer3']
+            for category in categories:
+                test_cases = self.test_suite.get_by_category(category)
+                if test_cases:
+                    # Sort test cases by ID
+                    test_cases = sorted(test_cases, key=lambda tc: tc.test_id)
+                    console.print(f"\n[bold cyan]{category.upper()}: {len(test_cases)} test cases[/bold cyan]")
+                    for tc in test_cases:
+                        if show_full_titles:
+                            console.print(f"  - {tc.test_id}: {tc.title}")
+                        else:
+                            title = tc.title[:60] + "..." if len(tc.title) > 60 else tc.title
+                            console.print(f"  - {tc.test_id}: {title}")
+        else:
+            # Display as table
+            table = Table(title="Test Case Summary", show_header=True)
+            table.add_column("Category", style="cyan")
+            table.add_column("Test ID", style="magenta")
+            table.add_column("Title", style="green")
+            table.add_column("Conversations", justify="center")
+            table.add_column("Rounds", justify="center")
+            
+            # Sort test cases by ID
+            sorted_test_cases = sorted(self.test_suite.test_cases, key=lambda tc: tc.test_id)
+            for test_case in sorted_test_cases:
+                total_rounds = sum(h.rounds for h in test_case.conversation_histories)
+                title = test_case.title if show_full_titles else (test_case.title[:40] + "..." if len(test_case.title) > 40 else test_case.title)
+                table.add_row(
+                    test_case.category,
+                    test_case.test_id,
+                    title,
+                    str(len(test_case.conversation_histories)),
+                    str(total_rounds)
+                )
+            
+            console.print(table)
     
     def display_test_case_detail(self, test_id: str) -> None:
         """Display detailed information about a test case."""
@@ -378,6 +407,9 @@ class TestCaseExporter:
             category_cases = [tc for tc in test_cases if tc.category == category]
             if not category_cases:
                 continue
+            
+            # Sort by test_id for consistent ordering
+            category_cases = sorted(category_cases, key=lambda tc: tc.test_id)
             
             content += f"## {category.upper()}\n\n"
             for tc in category_cases:

@@ -60,7 +60,8 @@ class InteractiveEvaluator:
     def list_test_cases(self):
         """List all available test cases."""
         console.print("\n[bold]Available Test Cases:[/bold]")
-        self.framework.display_test_case_summary()
+        # Show all test cases with full titles organized by category
+        self.framework.display_test_case_summary(show_full_titles=True, by_category=True)
         
     def view_test_case(self):
         """View details of a specific test case."""
