@@ -113,17 +113,22 @@ finally:
 import sys
 import json
 from pathlib import Path
+import traceback
 
-from framework import UserMemoryEvaluationFramework
-from models import MessageRole
-
-framework = UserMemoryEvaluationFramework()
-tc = framework.get_test_case("{test_id}")
-
-if not tc:
-    print(json.dumps(None))
-else:
-    details = {{
+try:
+    from framework import UserMemoryEvaluationFramework
+    from models import MessageRole
+    
+    framework = UserMemoryEvaluationFramework()
+    tc = framework.get_test_case("{test_id}")
+    
+    if not tc:
+        print(json.dumps(None))
+        sys.stderr.write(f"Test case {test_id} not found in framework\\n")
+        if framework.test_suite:
+            sys.stderr.write(f"Available test cases: {{len(framework.test_suite.test_cases)}}\\n")
+    else:
+        details = {{
         'test_id': tc.test_id,
         'category': tc.category,
         'title': tc.title,
@@ -165,7 +170,20 @@ else:
             print(f"Error getting test case details: {result.stderr}")
             return None
         
-        return json.loads(result.stdout)
+        if not result.stdout.strip():
+            print(f"Error: Empty response from evaluation framework")
+            if result.stderr:
+                print(f"Stderr output: {result.stderr}")
+            return None
+        
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON response: {e}")
+            print(f"Stdout was: {result.stdout[:500]}...")
+            if result.stderr:
+                print(f"Stderr: {result.stderr}")
+            return None
     
     def evaluate_response(self, test_id: str, agent_response: str, extracted_memory: str = "") -> Dict[str, Any]:
         """Evaluate the agent's response using the evaluation framework"""
@@ -365,10 +383,8 @@ else:
             if choice == "1":
                 for cat in sorted(categories.keys()):
                     print(f"\n{cat.upper()}: {len(categories[cat])} test cases")
-                    for tc in categories[cat][:3]:
-                        print(f"  - {tc['test_id']}: {tc['title'][:50]}...")
-                    if len(categories[cat]) > 3:
-                        print(f"  ... and {len(categories[cat])-3} more")
+                    for tc in categories[cat]:
+                        print(f"  - {tc['test_id']}: {tc['title']}")
             
             elif choice == "2":
                 test_id = input("\nEnter test case ID: ").strip()

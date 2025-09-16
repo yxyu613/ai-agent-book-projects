@@ -183,6 +183,13 @@ class NotesMemoryManager(BaseMemoryManager):
         self.notes = [note for note in self.notes if note.note_id != memory_id]
         self.save_memory()
     
+    def clear_all_memories(self):
+        """Clear all memories for this user - useful for testing"""
+        self.notes = []
+        self.save_memory()
+        logger.info(f"Cleared all memories for user {self.user_id}")
+        print(f"  🧹 Cleared all memories for user {self.user_id}")
+    
     def get_context_string(self) -> str:
         """Get notes as formatted string for LLM context"""
         if not self.notes:
@@ -318,6 +325,13 @@ class JSONMemoryManager(BaseMemoryManager):
                 del self.memory_cards[category]
             
             self.save_memory()
+    
+    def clear_all_memories(self):
+        """Clear all memories for this user - useful for testing"""
+        self.memory_cards = {}
+        self.save_memory()
+        logger.info(f"Cleared all memories for user {self.user_id}")
+        print(f"  🧹 Cleared all memories for user {self.user_id}")
     
     def get_context_string(self) -> str:
         """Get memory cards as formatted string for LLM context"""

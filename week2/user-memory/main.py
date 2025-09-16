@@ -15,6 +15,12 @@ from conversational_agent import ConversationalAgent, ConversationConfig
 from background_memory_processor import BackgroundMemoryProcessor, MemoryProcessorConfig
 from config import Config, MemoryMode
 
+# Add evaluation framework support
+# We load it dynamically only when needed to avoid import conflicts
+EVALUATION_AVAILABLE = False
+UserMemoryEvaluationFramework = None
+TestCase = None
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -354,6 +360,282 @@ def demo_memory_system():
     print(agent.memory_manager.get_context_string())
 
 
+def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = False):
+    """Run evaluation mode using the evaluation framework"""
+    
+    # Import the evaluation framework with proper module isolation
+    from pathlib import Path
+    
+    eval_framework_path = Path(__file__).parent.parent / "user-memory-evaluation"
+    
+    try:
+        # Save the current modules to avoid conflicts
+        saved_modules = {}
+        conflicting_modules = ['config', 'models', 'evaluator', 'framework']
+        
+        # Temporarily remove conflicting modules from sys.modules
+        for module_name in conflicting_modules:
+            if module_name in sys.modules:
+                saved_modules[module_name] = sys.modules[module_name]
+                del sys.modules[module_name]
+        
+        # Temporarily add evaluation framework path with highest priority
+        original_path = sys.path.copy()
+        sys.path.insert(0, str(eval_framework_path))
+        
+        # Import evaluation framework modules
+        import config as eval_config
+        import models as eval_models  
+        import evaluator as eval_evaluator
+        import framework as eval_framework
+        
+        # Get the class we need
+        framework_class = eval_framework.UserMemoryEvaluationFramework
+        
+        # Restore original path
+        sys.path = original_path
+        
+        # Remove evaluation modules from sys.modules to avoid future conflicts
+        for module_name in conflicting_modules:
+            if module_name in sys.modules:
+                del sys.modules[module_name]
+        
+        # Restore original modules
+        for module_name, module in saved_modules.items():
+            sys.modules[module_name] = module
+            
+    except Exception as e:
+        # Restore on error
+        sys.path = original_path if 'original_path' in locals() else sys.path
+        for module_name, module in saved_modules.items():
+            sys.modules[module_name] = module
+            
+        print(f"❌ Error: Could not load evaluation framework: {e}")
+        print("Please ensure user-memory-evaluation is properly installed.")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+    
+    print_section("Evaluation Mode - Test Case Based Evaluation")
+    
+    # Initialize evaluation framework
+    framework = framework_class()
+    
+    if not framework.test_suite:
+        print("❌ Error: No test cases loaded")
+        sys.exit(1)
+    
+    print(f"\n✅ Loaded {len(framework.test_suite.test_cases)} test cases")
+    
+    # Initialize agents without incorrect parameters
+    # ConversationConfig is a dataclass and doesn't take parameters in __init__
+    conv_config = ConversationConfig()
+    conv_config.enable_memory_context = True
+    conv_config.enable_conversation_history = True
+    
+    mem_config = MemoryProcessorConfig()
+    mem_config.verbose = verbose
+    mem_config.memory_mode = memory_mode
+    
+    # Initialize agents with correct parameters
+    agent = ConversationalAgent(
+        user_id=user_id,
+        config=conv_config,
+        memory_mode=memory_mode,
+        verbose=verbose
+    )
+    processor = BackgroundMemoryProcessor(
+        user_id=user_id,
+        config=mem_config
+    )
+    
+    while True:
+        print("\n" + "-"*60)
+        print("Options:")
+        print("1. List test cases by category")
+        print("2. Run a specific test case")
+        print("3. View current memory state")
+        print("4. Clear memory and start fresh")
+        print("5. Exit evaluation mode")
+        
+        choice = input("\nEnter your choice (1-5): ").strip()
+        
+        if choice == "1":
+            # List test cases
+            print("\n📋 Available Test Cases:")
+            framework.display_test_case_summary(show_full_titles=True, by_category=True)
+            
+        elif choice == "2":
+            # Run a specific test case
+            test_id = input("\nEnter test case ID: ").strip()
+            test_case = framework.get_test_case(test_id)
+            
+            if not test_case:
+                print(f"❌ Test case '{test_id}' not found")
+                continue
+            
+            print(f"\n{'='*60}")
+            print(f"Running Test Case: {test_case.title}")
+            print(f"Category: {test_case.category}")
+            print("="*60)
+            
+            # Clear existing memory and conversation history before test
+            print("\n🧹 Clearing previous memory and conversation history...")
+            
+            # Clear memory
+            if hasattr(agent.memory_manager, 'clear_all_memories'):
+                agent.memory_manager.clear_all_memories()
+            if hasattr(processor.memory_manager, 'clear_all_memories'):
+                processor.memory_manager.clear_all_memories()
+            
+            # Clear conversation history
+            if agent.conversation_history:
+                agent.conversation_history.conversations = []
+                agent.conversation_history.save_history()
+                print(f"  🧹 Cleared conversation history for user {user_id}")
+            
+            # Reset agent conversation
+            agent.conversation = []
+            agent._init_system_prompt()
+            
+            # Process conversation histories
+            print(f"\n📚 Processing {len(test_case.conversation_histories)} conversation histories...")
+            
+            # Build conversation contexts from test case histories
+            conversation_contexts = []
+            
+            for i, history in enumerate(test_case.conversation_histories, 1):
+                print(f"\nConversation {i}/{len(test_case.conversation_histories)}: {history.conversation_id}")
+                
+                # Build conversation context for this history
+                conversation = []
+                
+                # Process each message in the conversation
+                for msg in history.messages:
+                    if msg.role.value == "user":
+                        conversation.append({"role": "user", "content": msg.content})
+                    elif msg.role.value == "assistant":
+                        conversation.append({"role": "assistant", "content": msg.content})
+                
+                conversation_contexts.append(conversation)
+                
+                # Also add to the agent's conversation history for context
+                # This is needed for the agent to have context when answering the question
+                if agent.conversation_history and hasattr(agent.conversation_history, 'add_turn'):
+                    # Add pairs of user/assistant messages
+                    user_msg = None
+                    for msg in history.messages:
+                        if msg.role.value == "user":
+                            user_msg = msg.content
+                        elif msg.role.value == "assistant" and user_msg:
+                            agent.conversation_history.add_turn(
+                                session_id=f"eval_{history.conversation_id}",
+                                user_message=user_msg,
+                                assistant_message=msg.content
+                            )
+                            user_msg = None
+            
+            # Process all conversations through the memory processor
+            if conversation_contexts:
+                print(f"\n💾 Processing memory for all conversations...")
+                try:
+                    results = processor.process_conversation_batch(conversation_contexts)
+                    
+                    # Summarize results
+                    total_added = sum(r.get('summary', {}).get('added', 0) for r in results)
+                    total_updated = sum(r.get('summary', {}).get('updated', 0) for r in results)
+                    total_deleted = sum(r.get('summary', {}).get('deleted', 0) for r in results)
+                    
+                    print(f"  ✅ Memory processing complete:")
+                    print(f"     - Added: {total_added} memories")
+                    print(f"     - Updated: {total_updated} memories")
+                    print(f"     - Deleted: {total_deleted} memories")
+                except Exception as e:
+                    print(f"  ⚠️ Memory processing error: {e}")
+            
+            # Now answer the user question
+            print(f"\n{'='*60}")
+            print("USER QUESTION:")
+            print("-"*60)
+            print(test_case.user_question)
+            print("="*60)
+            
+            # Get agent response
+            print("\n🤔 Generating response...")
+            response = agent.chat(test_case.user_question)
+            
+            print("\n📝 Agent Response:")
+            print("-"*60)
+            print(response)
+            print("-"*60)
+            
+            # Evaluate the response
+            print("\n⚖️ Evaluating response...")
+            result = framework.submit_and_evaluate(test_id, response)
+            
+            if result:
+                # Display evaluation result
+                is_passed = result.passed if result.passed is not None else result.reward >= 0.6
+                status = "✅ PASSED" if is_passed else "❌ FAILED"
+                
+                print(f"\n{'='*60}")
+                print("EVALUATION RESULT:")
+                print("-"*60)
+                print(f"Status: {status}")
+                print(f"Reward Score: {result.reward:.3f}/1.000")
+                
+                if result.reasoning:
+                    print(f"\nReasoning:")
+                    print(result.reasoning)
+                
+                if result.suggestions:
+                    print(f"\nSuggestions:")
+                    print(result.suggestions)
+                print("="*60)
+            else:
+                print("❌ Evaluation failed")
+            
+            # Clear conversation history for next test
+            agent.conversation_history = []
+            
+        elif choice == "3":
+            # View current memory
+            print("\n📄 Current Memory State:")
+            print("-"*60)
+            memories = processor.get_current_memories()
+            if memories:
+                for mem in memories:
+                    print(f"  • {mem}")
+            else:
+                print("  (No memories stored)")
+                
+        elif choice == "4":
+            # Clear memory
+            if input("\n⚠️ Are you sure you want to clear all memory? (yes/no): ").lower() == "yes":
+                # Clear memory using the new method
+                if hasattr(agent.memory_manager, 'clear_all_memories'):
+                    agent.memory_manager.clear_all_memories()
+                if hasattr(processor.memory_manager, 'clear_all_memories'):
+                    processor.memory_manager.clear_all_memories()
+                
+                # Clear conversation history
+                if agent.conversation_history:
+                    agent.conversation_history.conversations = []
+                    agent.conversation_history.save_history()
+                
+                # Reset agent conversation
+                agent.conversation = []
+                agent._init_system_prompt()
+                
+                print("✅ Memory and conversation history cleared")
+                
+        elif choice == "5":
+            print("\nExiting evaluation mode...")
+            break
+        else:
+            print(f"❌ Invalid choice: {choice}")
+
+
 def run_benchmark():
     """Run a simple benchmark of the separated architecture"""
     print_section("Benchmarking Separated Memory Architecture")
@@ -429,7 +711,7 @@ def main():
     
     parser.add_argument(
         "--mode",
-        choices=["single", "interactive", "demo", "benchmark"],
+        choices=["single", "interactive", "demo", "benchmark", "evaluation"],
         default="interactive",
         help="Execution mode (default: interactive)"
     )
@@ -505,6 +787,9 @@ def main():
     
     elif args.mode == "benchmark":
         run_benchmark()
+    
+    elif args.mode == "evaluation":
+        run_evaluation_mode(args.user, memory_mode, args.verbose)
     
     else:  # interactive mode
         interactive_mode(

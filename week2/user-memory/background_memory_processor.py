@@ -271,6 +271,9 @@ Analyze the conversation and provide memory updates:"""
                     results['added'] += 1
                     results['details'].append(f"Added: {update.content[:50]}...")
                     
+                    # Always print to console for demo purposes
+                    print(f"  📝 [ADD] Memory: {update.content}")
+                    
                     if self.verbose:
                         logger.info(f"Added memory: {update.content}")
                 
@@ -284,6 +287,9 @@ Analyze the conversation and provide memory updates:"""
                     if success:
                         results['updated'] += 1
                         results['details'].append(f"Updated {update.memory_id}: {update.content[:50]}...")
+                        
+                        # Always print to console for demo purposes
+                        print(f"  ✏️  [UPDATE] Memory (ID: {update.memory_id[:8]}...): {update.content}")
                     else:
                         results['failed'] += 1
                     
@@ -294,6 +300,9 @@ Analyze the conversation and provide memory updates:"""
                     self.memory_manager.delete_memory(update.memory_id)
                     results['deleted'] += 1
                     results['details'].append(f"Deleted: {update.memory_id}")
+                    
+                    # Always print to console for demo purposes
+                    print(f"  🗑️  [DELETE] Memory ID: {update.memory_id}")
                     
                     if self.verbose:
                         logger.info(f"Deleted memory: {update.memory_id}")
