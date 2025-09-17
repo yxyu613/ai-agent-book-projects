@@ -11,6 +11,7 @@ import logging
 import argparse
 import time
 from pathlib import Path
+from typing import Optional
 from conversational_agent import ConversationalAgent, ConversationConfig
 from background_memory_processor import BackgroundMemoryProcessor, MemoryProcessorConfig
 from config import Config, MemoryMode
@@ -88,43 +89,27 @@ def print_result(result: dict):
         print(memory_preview)
 
 
-def execute_single_conversation(user_id: str, message: str, memory_mode: MemoryMode = MemoryMode.NOTES, verbose: bool = False):
-    """Have a single conversation with the agent"""
-    api_key = Config.MOONSHOT_API_KEY
-    if not api_key:
-        print("❌ Error: Please set MOONSHOT_API_KEY environment variable")
-        print("   export MOONSHOT_API_KEY='your-api-key-here'")
-        return None
-    
-    config = ConversationConfig(
-        enable_memory_context=True,
-        enable_conversation_history=True
-    )
-    
-    agent = ConversationalAgent(
-        user_id=user_id,
-        api_key=api_key,
-        config=config,
-        memory_mode=memory_mode,
-        verbose=verbose
-    )
-    
-    print(f"\n💬 User ({user_id}): {message}")
-    response = agent.chat(message)
-    print(f"🤖 Assistant: {response}")
-    return response
-
-
 def interactive_mode(user_id: str, memory_mode: MemoryMode = MemoryMode.NOTES, 
                     enable_background_processing: bool = True,
-                    conversation_interval: int = 1):
+                    conversation_interval: int = 1,
+                    provider: Optional[str] = None,
+                    model: Optional[str] = None):
     """Run the agent in interactive mode with separated architecture"""
     print_section(f"Interactive Mode - Conversational Agent (User: {user_id})")
     
-    api_key = Config.MOONSHOT_API_KEY
+    # Determine provider and get API key
+    provider = (provider or Config.PROVIDER).lower()
+    api_key = Config.get_api_key(provider)
     if not api_key:
-        print("❌ Error: Please set MOONSHOT_API_KEY environment variable")
-        print("   export MOONSHOT_API_KEY='your-api-key-here'")
+        print(f"❌ Error: Please set API key for provider '{provider}'")
+        if provider in ["kimi", "moonshot"]:
+            print("   export MOONSHOT_API_KEY='your-api-key-here'")
+        elif provider == "siliconflow":
+            print("   export SILICONFLOW_API_KEY='your-api-key-here'")
+        elif provider == "doubao":
+            print("   export DOUBAO_API_KEY='your-api-key-here'")
+        elif provider == "openrouter":
+            print("   export OPENROUTER_API_KEY='your-api-key-here'")
         return
     
     # Initialize conversational agent
@@ -136,9 +121,11 @@ def interactive_mode(user_id: str, memory_mode: MemoryMode = MemoryMode.NOTES,
     agent = ConversationalAgent(
         user_id=user_id,
         api_key=api_key,
+        provider=provider,
+        model=model,
         config=conv_config,
         memory_mode=memory_mode,
-        verbose=False
+        verbose=True
     )
     
     # Initialize and start background memory processor if enabled
@@ -148,7 +135,6 @@ def interactive_mode(user_id: str, memory_mode: MemoryMode = MemoryMode.NOTES,
             conversation_interval=conversation_interval,
             min_conversation_turns=1,
             context_window=10,
-            update_threshold=0.7,
             enable_auto_processing=True,
             output_operations=True
         )
@@ -156,9 +142,11 @@ def interactive_mode(user_id: str, memory_mode: MemoryMode = MemoryMode.NOTES,
         memory_processor = BackgroundMemoryProcessor(
             user_id=user_id,
             api_key=api_key,
+            provider=provider,
+            model=model,
             config=proc_config,
             memory_mode=memory_mode,
-            verbose=False
+            verbose=True
         )
         
         memory_processor.start_background_processing()
@@ -173,8 +161,10 @@ def interactive_mode(user_id: str, memory_mode: MemoryMode = MemoryMode.NOTES,
     print("\nAvailable commands:")
     print("  'memory'  - Show current memory state")
     print("  'process' - Manually trigger memory processing")
+    print("  'save'    - Save memory immediately")
     print("  'reset'   - Start new conversation session")
-    print("  'quit'    - Exit interactive mode")
+    print("  'quit'    - Exit immediately without saving")
+    print("  'exit'    - Exit immediately without saving")
     print("\nOr enter any message to chat.")
     
     conversation_count = 0
@@ -187,14 +177,22 @@ def interactive_mode(user_id: str, memory_mode: MemoryMode = MemoryMode.NOTES,
             if not user_input:
                 continue
             
-            if user_input.lower() == 'quit':
+            if user_input.lower() in ['quit', 'exit']:
+                # Immediate exit without saving
                 if memory_processor:
-                    print("\n⏳ Processing final memory updates...")
-                    results = memory_processor.process_recent_conversations()
-                    print(f"📝 Final processing: {results}")
                     memory_processor.stop_background_processing()
-                print("👋 Goodbye!")
+                print("👋 Goodbye! (Exited without saving)")
                 break
+            
+            elif user_input.lower() == 'save':
+                # Save memory immediately
+                print("\n💾 Saving memory...")
+                if memory_processor:
+                    results = memory_processor.process_recent_conversations()
+                    print(f"✅ Memory saved: {results}")
+                else:
+                    print("⚠️ Background processing is disabled. Memory is saved after each conversation.")
+                continue
             
             elif user_input.lower() == 'memory':
                 print("\n💭 Current Memory State:")
@@ -213,8 +211,6 @@ def interactive_mode(user_id: str, memory_mode: MemoryMode = MemoryMode.NOTES,
                         for i, op in enumerate(operations, 1):
                             icon = {'add': '➕', 'update': '📝', 'delete': '🗑️'}.get(op['action'], '❓')
                             print(f"{i}. {icon} {op['action'].upper()}: {op.get('content', op.get('memory_id', 'N/A'))}")
-                            if op.get('confidence'):
-                                print(f"   Confidence: {op['confidence']:.2%}")
                     else:
                         print("ℹ️ No memory updates needed")
                     
@@ -249,7 +245,7 @@ def interactive_mode(user_id: str, memory_mode: MemoryMode = MemoryMode.NOTES,
                             print(f"\n[Memory processing in {conversations_until_process} more conversation{'s' if conversations_until_process > 1 else ''}]")
                 
         except KeyboardInterrupt:
-            print("\n\n⚠️ Interrupted. Type 'quit' to exit.")
+            print("\n\n⚠️ Interrupted. Type 'save' to save memory, or 'quit'/'exit' to exit immediately without saving.")
         except Exception as e:
             print(f"\n❌ Error: {str(e)}")
             logger.error(f"Error in interactive mode: {e}", exc_info=True)
@@ -259,18 +255,23 @@ def interactive_mode(user_id: str, memory_mode: MemoryMode = MemoryMode.NOTES,
         memory_processor.stop_background_processing()
 
 
-def demo_memory_system():
+def demo_memory_system(memory_mode: MemoryMode = None, provider: Optional[str] = None, model: Optional[str] = None):
     """Demonstrate the separated memory system architecture"""
     print_section("Demo: Separated Memory Architecture")
     
-    api_key = Config.MOONSHOT_API_KEY
+    # Determine provider and get API key
+    provider = (provider or Config.PROVIDER).lower()
+    api_key = Config.get_api_key(provider)
     if not api_key:
-        print("❌ Please set MOONSHOT_API_KEY environment variable")
+        print(f"❌ Please set API key for provider '{provider}'")
         return
     
     # Create test user
     user_id = "demo_user"
-    memory_mode = MemoryMode.NOTES
+    
+    # Use provided memory_mode or prompt for it
+    if memory_mode is None:
+        memory_mode = select_memory_mode_interactive()
     
     # Initialize conversational agent
     conv_config = ConversationConfig(
@@ -281,6 +282,8 @@ def demo_memory_system():
     agent = ConversationalAgent(
         user_id=user_id,
         api_key=api_key,
+        provider=provider,
+        model=model,
         config=conv_config,
         memory_mode=memory_mode,
         verbose=True
@@ -290,13 +293,14 @@ def demo_memory_system():
     proc_config = MemoryProcessorConfig(
         conversation_interval=2,  # Process every 2 conversations for demo
         min_conversation_turns=1,
-        update_threshold=0.6,
         output_operations=True
     )
     
     processor = BackgroundMemoryProcessor(
         user_id=user_id,
         api_key=api_key,
+        provider=provider,
+        model=model,
         config=proc_config,
         memory_mode=memory_mode,
         verbose=True
@@ -336,7 +340,6 @@ def demo_memory_system():
         for i, op in enumerate(operations, 1):
             icon = {'add': '➕', 'update': '📝', 'delete': '🗑️'}.get(op['action'], '❓')
             print(f"{i}. {icon} {op['action'].upper()}: {op.get('content', op.get('memory_id', 'N/A'))}")
-            print(f"   Confidence: {op.get('confidence', 0):.2%}")
     else:
         print("ℹ️ No memory updates needed")
     
@@ -360,7 +363,7 @@ def demo_memory_system():
     print(agent.memory_manager.get_context_string())
 
 
-def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = False):
+def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = True, provider: Optional[str] = None, model: Optional[str] = None):
     """Run evaluation mode using the evaluation framework"""
     
     # Import the evaluation framework with proper module isolation
@@ -427,6 +430,13 @@ def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = F
     
     print(f"\n✅ Loaded {len(framework.test_suite.test_cases)} test cases")
     
+    # Determine provider and get API key
+    provider = (provider or Config.PROVIDER).lower()
+    api_key = Config.get_api_key(provider)
+    if not api_key:
+        print(f"❌ Error: Please set API key for provider '{provider}'")
+        sys.exit(1)
+    
     # Initialize agents without incorrect parameters
     # ConversationConfig is a dataclass and doesn't take parameters in __init__
     conv_config = ConversationConfig()
@@ -435,39 +445,48 @@ def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = F
     
     mem_config = MemoryProcessorConfig()
     mem_config.verbose = verbose
-    mem_config.memory_mode = memory_mode
     
     # Initialize agents with correct parameters
     agent = ConversationalAgent(
         user_id=user_id,
+        api_key=api_key,
+        provider=provider,
+        model=model,
         config=conv_config,
         memory_mode=memory_mode,
         verbose=verbose
     )
     processor = BackgroundMemoryProcessor(
         user_id=user_id,
-        config=mem_config
+        api_key=api_key,
+        provider=provider,
+        model=model,
+        config=mem_config,
+        memory_mode=memory_mode,  # Pass memory_mode here!
+        verbose=verbose
     )
     
     while True:
         print("\n" + "-"*60)
         print("Options:")
-        print("1. List test cases by category")
-        print("2. Run a specific test case")
-        print("3. View current memory state")
-        print("4. Clear memory and start fresh")
-        print("5. Exit evaluation mode")
+        print("1. Run a test case")
+        print("2. View current memory state")
+        print("3. Clear memory and start fresh")
+        print("4. Exit evaluation mode")
         
-        choice = input("\nEnter your choice (1-5): ").strip()
+        choice = input("\nEnter your choice (1-4): ").strip()
         
         if choice == "1":
-            # List test cases
+            # First list test cases, then let user choose
             print("\n📋 Available Test Cases:")
             framework.display_test_case_summary(show_full_titles=True, by_category=True)
             
-        elif choice == "2":
-            # Run a specific test case
-            test_id = input("\nEnter test case ID: ").strip()
+            # Now let user select a test case
+            test_id = input("\nEnter test case ID to run (or 'cancel' to go back): ").strip()
+            
+            if test_id.lower() == 'cancel':
+                continue
+            
             test_case = framework.get_test_case(test_id)
             
             if not test_case:
@@ -479,24 +498,48 @@ def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = F
             print(f"Category: {test_case.category}")
             print("="*60)
             
-            # Clear existing memory and conversation history before test
-            print("\n🧹 Clearing previous memory and conversation history...")
+            # CRITICAL: Clear ALL memory and conversation state before test
+            print("\n🧹 Clearing all memory and conversation state before test...")
             
-            # Clear memory
+            # 1. Clear memory managers for both agent and processor
             if hasattr(agent.memory_manager, 'clear_all_memories'):
                 agent.memory_manager.clear_all_memories()
+                # Verify memory is cleared
+                memory_check = agent.memory_manager.get_context_string()
+                if "No previous memory" not in memory_check:
+                    print(f"  ⚠️ Warning: Agent memory may not be fully cleared")
+                else:
+                    print(f"  ✅ Agent memory cleared successfully")
+            
             if hasattr(processor.memory_manager, 'clear_all_memories'):
                 processor.memory_manager.clear_all_memories()
+                # Verify memory is cleared
+                memory_check = processor.memory_manager.get_context_string()
+                if "No previous memory" not in memory_check:
+                    print(f"  ⚠️ Warning: Processor memory may not be fully cleared")
+                else:
+                    print(f"  ✅ Processor memory cleared successfully")
             
-            # Clear conversation history
+            # 2. Clear conversation history completely
             if agent.conversation_history:
                 agent.conversation_history.conversations = []
                 agent.conversation_history.save_history()
-                print(f"  🧹 Cleared conversation history for user {user_id}")
+                print(f"  ✅ Cleared conversation history for user {user_id}")
             
-            # Reset agent conversation
+            if processor.conversation_history:
+                processor.conversation_history.conversations = []
+                processor.conversation_history.save_history()
+                print(f"  ✅ Cleared processor conversation history")
+            
+            # 3. Reset agent conversation state
             agent.conversation = []
             agent._init_system_prompt()
+            
+            # 4. Reset any tool call counts
+            if hasattr(agent, 'tool_call_counts'):
+                agent.tool_call_counts = {}
+            
+            print(f"  ✅ All memory and state cleared - ready for test case")
             
             # Process conversation histories
             print(f"\n📚 Processing {len(test_case.conversation_histories)} conversation histories...")
@@ -553,6 +596,37 @@ def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = F
                 except Exception as e:
                     print(f"  ⚠️ Memory processing error: {e}")
             
+            # CRITICAL: Clear conversation history to simulate a new session
+            # The evaluation should test whether STRUCTURED MEMORIES work,
+            # not whether raw conversation history works.
+            # The agent must rely only on processed memories to answer the question.
+            if agent.conversation_history:
+                # Save the current conversation history (for record keeping)
+                saved_conversations = agent.conversation_history.conversations if hasattr(agent.conversation_history, 'conversations') else []
+                # Clear the conversations list to simulate a fresh session
+                agent.conversation_history.conversations = []
+                print("\n🔄 Cleared conversation history - starting fresh session")
+                print("   (Agent will use only structured memories)")
+            
+            # Reset the agent's conversation to start fresh
+            agent.conversation = []
+            agent._init_system_prompt()
+            
+            # CRITICAL: Reload the agent's memory manager to get the memories saved by the processor
+            # The processor and agent have separate memory manager instances, so we need to reload
+            # from file to get the memories that were just saved
+            agent.memory_manager.load_memory()
+            
+            # Display what memories are available
+            memory_context = agent.memory_manager.get_context_string()
+            if memory_context:
+                print("\n💾 Available memories:")
+                print("-"*40)
+                print(memory_context[:500] + "..." if len(memory_context) > 500 else memory_context)
+                print("-"*40)
+            else:
+                print("\n⚠️  No structured memories available")
+            
             # Now answer the user question
             print(f"\n{'='*60}")
             print("USER QUESTION:")
@@ -560,7 +634,7 @@ def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = F
             print(test_case.user_question)
             print("="*60)
             
-            # Get agent response
+            # Get agent response (now only using structured memories)
             print("\n🤔 Generating response...")
             response = agent.chat(test_case.user_question)
             
@@ -568,6 +642,10 @@ def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = F
             print("-"*60)
             print(response)
             print("-"*60)
+            
+            # Restore conversation history after evaluation
+            if agent.conversation_history and 'saved_conversations' in locals():
+                agent.conversation_history.conversations = saved_conversations
             
             # Evaluate the response
             print("\n⚖️ Evaluating response...")
@@ -598,7 +676,7 @@ def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = F
             # Clear conversation history for next test
             agent.conversation_history = []
             
-        elif choice == "3":
+        elif choice == "2":
             # View current memory
             print("\n📄 Current Memory State:")
             print("-"*60)
@@ -609,7 +687,7 @@ def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = F
             else:
                 print("  (No memories stored)")
                 
-        elif choice == "4":
+        elif choice == "3":
             # Clear memory
             if input("\n⚠️ Are you sure you want to clear all memory? (yes/no): ").lower() == "yes":
                 # Clear memory using the new method
@@ -629,78 +707,121 @@ def run_evaluation_mode(user_id: str, memory_mode: MemoryMode, verbose: bool = F
                 
                 print("✅ Memory and conversation history cleared")
                 
-        elif choice == "5":
+        elif choice == "4":
             print("\nExiting evaluation mode...")
             break
         else:
             print(f"❌ Invalid choice: {choice}")
 
 
-def run_benchmark():
-    """Run a simple benchmark of the separated architecture"""
-    print_section("Benchmarking Separated Memory Architecture")
+def select_mode_interactive() -> str:
+    """
+    Interactively prompt the user to select an execution mode
     
-    api_key = Config.MOONSHOT_API_KEY
-    if not api_key:
-        print("❌ Please set MOONSHOT_API_KEY environment variable")
-        return
+    Returns:
+        Selected mode string ('evaluation', 'interactive', or 'demo')
+    """
+    print("\n" + "="*60)
+    print("  🚀 SELECT EXECUTION MODE")
+    print("="*60)
     
-    test_cases = [
-        ("user1", ["I love hiking and photography", "I also enjoy reading sci-fi books"]),
-        ("user2", ["I'm a software engineer", "I work with React and Node.js"]),
-    ]
+    print("\n1. Evaluation Mode")
+    print("   - Run test cases from user-memory-evaluation framework")
+    print("   - Test memory system with predefined scenarios")
+    print("   - Get performance scores and feedback")
     
-    results = []
+    print("\n2. Interactive Mode")
+    print("   - Chat with the agent in real-time")
+    print("   - Memory processes automatically in background")
+    print("   - Commands: memory, process, save, reset, quit/exit")
     
-    for user_id, messages in test_cases:
-        print(f"\n📝 Testing User: {user_id}")
-        
-        # Create agent and processor
-        agent = ConversationalAgent(
-            user_id=user_id,
-            api_key=api_key,
-            memory_mode=MemoryMode.NOTES,
-            verbose=False
-        )
-        
-        processor = BackgroundMemoryProcessor(
-            user_id=user_id,
-            api_key=api_key,
-            memory_mode=MemoryMode.NOTES,
-            verbose=False
-        )
-        
-        # Have conversations
-        for msg in messages:
-            print(f"  💬 {msg}")
-            response = agent.chat(msg)
-        
-        # Process memories
-        conversation_context = agent.get_conversation_context()
-        updates = processor.analyze_conversation(conversation_context)
-        process_results = processor.apply_memory_updates(updates)
-        
-        # Test memory recall
-        test_response = agent.chat("What do you know about me?")
-        
-        results.append({
-            'user_id': user_id,
-            'messages_sent': len(messages),
-            'memory_updates': len(updates),
-            'memories_added': process_results['added'],
-            'response_includes_memory': any(
-                keyword in test_response.lower() 
-                for keyword in ['hiking', 'photography', 'reading', 'engineer', 'react', 'node']
-            )
-        })
+    print("\n3. Demo Mode")
+    print("   - Quick demonstration of memory system")
+    print("   - Shows how conversations are processed into memories")
+    print("   - Tests memory persistence across sessions")
     
-    print("\n📊 Benchmark Results:")
-    print("-"*60)
-    for r in results:
-        status = "✅" if r['response_includes_memory'] else "⚠️"
-        print(f"{status} User: {r['user_id']}, Messages: {r['messages_sent']}, "
-              f"Updates: {r['memory_updates']}, Added: {r['memories_added']}, "
-              f"Memory Recall: {'Yes' if r['response_includes_memory'] else 'No'}")
+    print("\n" + "-"*60)
+    
+    while True:
+        try:
+            choice = input("\nSelect mode (1-3): ").strip()
+            
+            if choice == '1':
+                print("✅ Selected: Evaluation Mode")
+                return "evaluation"
+            elif choice == '2':
+                print("✅ Selected: Interactive Mode")
+                return "interactive"
+            elif choice == '3':
+                print("✅ Selected: Demo Mode")
+                return "demo"
+            else:
+                print("❌ Invalid choice. Please enter 1, 2, or 3.")
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Operation cancelled by user")
+            sys.exit(0)
+        except Exception as e:
+            print(f"❌ Error: {e}")
+
+
+def select_memory_mode_interactive() -> MemoryMode:
+    """
+    Interactively prompt the user to select a memory mode
+    
+    Returns:
+        Selected MemoryMode
+    """
+    print("\n" + "="*60)
+    print("  📝 SELECT MEMORY MODE")
+    print("="*60)
+    
+    print("\n1. Simple Notes (Basic)")
+    print("   - Store simple facts and preferences")
+    print("   - Each memory is a single line or fact")
+    print("   - Example: 'User email: john@example.com'")
+    
+    print("\n2. Enhanced Notes")
+    print("   - Store comprehensive contextual information")
+    print("   - Each memory can be a full paragraph with context")
+    print("   - Example: 'User works at TechCorp as a senior engineer,")
+    print("             specializing in ML for 3 years...'")
+    
+    print("\n3. JSON Cards (Basic)")
+    print("   - Hierarchical structured memory")
+    print("   - Format: category → subcategory → key → value")
+    print("   - Example: personal.contact.email → 'john@example.com'")
+    
+    print("\n4. Advanced JSON Cards")
+    print("   - Complete memory card objects with metadata")
+    print("   - Each card includes backstory, person, relationship")
+    print("   - Prevents confusion between different contexts")
+    print("   - Example: Medical card for child vs elderly parent")
+    
+    print("\n" + "-"*60)
+    
+    while True:
+        try:
+            choice = input("\nSelect mode (1-4): ").strip()
+            
+            if choice == '1':
+                print("✅ Selected: Simple Notes Mode")
+                return MemoryMode.NOTES
+            elif choice == '2':
+                print("✅ Selected: Enhanced Notes Mode")
+                return MemoryMode.ENHANCED_NOTES
+            elif choice == '3':
+                print("✅ Selected: JSON Cards Mode")
+                return MemoryMode.JSON_CARDS
+            elif choice == '4':
+                print("✅ Selected: Advanced JSON Cards Mode")
+                return MemoryMode.ADVANCED_JSON_CARDS
+            else:
+                print("❌ Invalid choice. Please enter 1, 2, 3, or 4.")
+        except KeyboardInterrupt:
+            print("\n\n⚠️  Operation cancelled by user")
+            sys.exit(0)
+        except Exception as e:
+            print(f"❌ Error: {e}")
 
 
 def main():
@@ -711,9 +832,9 @@ def main():
     
     parser.add_argument(
         "--mode",
-        choices=["single", "interactive", "demo", "benchmark", "evaluation"],
-        default="interactive",
-        help="Execution mode (default: interactive)"
+        choices=["interactive", "demo", "evaluation"],
+        default=None,
+        help="Execution mode (if not specified, prompts interactively)"
     )
     
     parser.add_argument(
@@ -723,11 +844,6 @@ def main():
         help="User ID for memory system (default: default_user)"
     )
     
-    parser.add_argument(
-        "--message",
-        type=str,
-        help="Message to send (for single mode)"
-    )
     
     parser.add_argument(
         "--background-processing",
@@ -745,59 +861,89 @@ def main():
     
     parser.add_argument(
         "--memory-mode",
-        choices=["notes", "json_cards"],
-        default="notes",
-        help="Memory mode (default: notes)"
+        choices=["notes", "enhanced_notes", "json_cards", "advanced_json_cards"],
+        help="Memory mode (prompts interactively if not specified)"
     )
     
     parser.add_argument(
-        "--verbose",
+        "--provider",
+        choices=["siliconflow", "doubao", "kimi", "moonshot", "openrouter"],
+        default=None,
+        help="LLM provider (defaults to env PROVIDER or 'kimi')"
+    )
+    
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model name (defaults to provider's default model)"
+    )
+    
+    parser.add_argument(
+        "--no-verbose",
         action="store_true",
-        help="Enable verbose output"
+        help="Disable verbose output (verbose is enabled by default)"
     )
     
     args = parser.parse_args()
     
+    # Set verbose based on no-verbose flag (default is verbose=True)
+    verbose = not args.no_verbose
+    
+    # Determine provider
+    provider = args.provider or Config.PROVIDER
+    
     # Validate configuration
-    if not Config.validate():
+    if not Config.validate(provider):
         sys.exit(1)
     
     # Create necessary directories
     Config.create_directories()
     
-    # Configure based on command-line flags
-    memory_mode = MemoryMode.NOTES if args.memory_mode == "notes" else MemoryMode.JSON_CARDS
+    # Select execution mode if not specified
+    execution_mode = args.mode
+    if execution_mode is None:
+        # Prompt user to select mode
+        execution_mode = select_mode_interactive()
+    
+    # Configure memory mode
+    if args.memory_mode:
+        # Mode specified via command line
+        mode_map = {
+            "notes": MemoryMode.NOTES,
+            "enhanced_notes": MemoryMode.ENHANCED_NOTES,
+            "json_cards": MemoryMode.JSON_CARDS,
+            "advanced_json_cards": MemoryMode.ADVANCED_JSON_CARDS
+        }
+        memory_mode = mode_map[args.memory_mode]
+    else:
+        # Interactive mode selection
+        memory_mode = select_memory_mode_interactive()
     
     print("\n" + "🧠"*40)
     print("  USER MEMORY SYSTEM - SEPARATED ARCHITECTURE")
     print("🧠"*40)
     
-    if args.mode == "single":
-        if not args.message:
-            print("❌ Error: --message required for single mode")
-            print("Example: python main.py --mode single --user alice --message 'My name is Alice'")
-            sys.exit(1)
-        
-        response = execute_single_conversation(args.user, args.message, memory_mode, verbose=args.verbose)
-        if response:
-            print(f"\n✅ Conversation completed")
+    if execution_mode == "demo":
+        demo_memory_system(memory_mode, provider, args.model)
     
-    elif args.mode == "demo":
-        demo_memory_system()
+    elif execution_mode == "evaluation":
+        run_evaluation_mode(args.user, memory_mode, verbose, provider, args.model)
     
-    elif args.mode == "benchmark":
-        run_benchmark()
-    
-    elif args.mode == "evaluation":
-        run_evaluation_mode(args.user, memory_mode, args.verbose)
-    
-    else:  # interactive mode
+    elif execution_mode == "interactive":
         interactive_mode(
             user_id=args.user,
             memory_mode=memory_mode,
             enable_background_processing=args.background_processing,
-            conversation_interval=args.conversation_interval
+            conversation_interval=args.conversation_interval,
+            provider=provider,
+            model=args.model
         )
+    
+    else:
+        # This should not happen, but handle it gracefully
+        print(f"❌ Unknown execution mode: {execution_mode}")
+        sys.exit(1)
     
     print("\n👋 Thank you for using User Memory Agent!")
 

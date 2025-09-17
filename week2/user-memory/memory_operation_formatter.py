@@ -51,10 +51,6 @@ def format_memory_operations(operations: List[Dict[str, Any]], verbose: bool = F
         if op.get('reason'):
             lines.append(f"   Reason: {op['reason']}")
         
-        # Confidence
-        if 'confidence' in op:
-            lines.append(f"   Confidence: {op['confidence']:.2%}")
-        
         # Tags
         if op.get('tags'):
             lines.append(f"   Tags: {', '.join(op['tags'])}")
@@ -144,16 +140,3 @@ def filter_operations_by_action(operations: List[Dict[str, Any]], action: str) -
     """
     return [op for op in operations if op.get('action') == action]
 
-
-def filter_operations_by_confidence(operations: List[Dict[str, Any]], min_confidence: float) -> List[Dict[str, Any]]:
-    """
-    Filter operations by minimum confidence level
-    
-    Args:
-        operations: List of memory operations
-        min_confidence: Minimum confidence threshold (0.0 to 1.0)
-        
-    Returns:
-        Filtered list of operations
-    """
-    return [op for op in operations if op.get('confidence', 0) >= min_confidence]

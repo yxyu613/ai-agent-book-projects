@@ -138,7 +138,6 @@ def demonstrate_conversation_processing():
                 if op.get('reason'):
                     print(f"  Reason: {op['reason'][:100]}...")
                 
-                print(f"  Confidence: {op.get('confidence', 0):.1%}")
                 print()
         else:
             print("Memory Operations: None (no updates needed)")
@@ -178,7 +177,7 @@ def demonstrate_conversation_processing():
     print("\nKey Points:")
     print("  1. Memory processing occurs after EACH conversation round")
     print("  2. Operations list shows exactly what changes (0, 1, or more operations)")
-    print("  3. Each operation includes action type, content, and confidence score")
+    print("  3. Each operation includes action type, content")
     print("  4. No memory updates for simple queries (demonstrating intelligent processing)")
     print("  5. Updates are incremental and context-aware")
 

@@ -105,8 +105,6 @@ def quickstart():
             for j, op in enumerate(operations, 1):
                 icon = {'add': '➕', 'update': '📝', 'delete': '🗑️'}.get(op['action'], '❓')
                 print(f"  {j}. {icon} {op['action'].upper()}: {op.get('content', '')[:80]}...")
-                if op.get('confidence'):
-                    print(f"     Confidence: {op['confidence']:.2%}")
         else:
             print("  ℹ️ No memory updates needed")
         
@@ -165,8 +163,6 @@ def quickstart():
                 print(f"  {j}. {icon} {op['action'].upper()}: {content[:80]}...")
                 if op.get('reason'):
                     print(f"     Reason: {op['reason'][:80]}...")
-                if op.get('confidence'):
-                    print(f"     Confidence: {op['confidence']:.2%}")
         else:
             print("  ℹ️ No memory updates needed")
         
@@ -190,7 +186,6 @@ def quickstart():
     print("  • Separated conversation and memory processing")
     print("  • Memory operations after each conversation round")
     print("  • Clear list of add/update/delete operations")
-    print("  • Confidence scores for each operation")
     print("  • Memory persistence across sessions")
     
     print("\n📚 Next Steps:")

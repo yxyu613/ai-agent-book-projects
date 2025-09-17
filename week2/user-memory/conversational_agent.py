@@ -38,15 +38,19 @@ class ConversationalAgent:
     def __init__(self, 
                  user_id: str,
                  api_key: Optional[str] = None,
+                 provider: Optional[str] = None,
+                 model: Optional[str] = None,
                  config: Optional[ConversationConfig] = None,
                  memory_mode: MemoryMode = MemoryMode.NOTES,
-                 verbose: bool = False):
+                 verbose: bool = True):
         """
         Initialize the conversational agent
         
         Args:
             user_id: Unique user identifier
-            api_key: API key for Kimi/Moonshot
+            api_key: API key (defaults to env based on provider)
+            provider: LLM provider ('siliconflow', 'doubao', 'kimi', 'moonshot')
+            model: Model name (defaults to provider's default)
             config: Agent configuration
             memory_mode: Memory storage mode
             verbose: Enable verbose logging
@@ -56,16 +60,43 @@ class ConversationalAgent:
         self.config = config or ConversationConfig()
         self.memory_mode = memory_mode
         
-        # Initialize OpenAI client
-        api_key = api_key or Config.MOONSHOT_API_KEY
-        if not api_key:
-            raise ValueError("API key required. Set MOONSHOT_API_KEY environment variable.")
+        # Determine provider
+        self.provider = (provider or Config.PROVIDER).lower()
         
-        self.client = OpenAI(
-            api_key=api_key,
-            base_url="https://api.moonshot.cn/v1"
-        )
-        self.model = "kimi-k2-0905-preview"
+        # Get API key for provider
+        api_key = api_key or Config.get_api_key(self.provider)
+        if not api_key:
+            raise ValueError(f"API key required for provider '{self.provider}'. Check environment variables.")
+        
+        # Configure client based on provider
+        if self.provider == "siliconflow":
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url="https://api.siliconflow.cn/v1"
+            )
+            self.model = model or "Qwen/Qwen3-235B-A22B-Thinking-2507"
+        elif self.provider == "doubao":
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url="https://ark.cn-beijing.volces.com/api/v3"
+            )
+            self.model = model or "doubao-seed-1-6-thinking-250715"
+        elif self.provider == "kimi" or self.provider == "moonshot":
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url="https://api.moonshot.cn/v1"
+            )
+            self.model = model or "kimi-k2-0905-preview"
+        elif self.provider == "openrouter":
+            self.client = OpenAI(
+                api_key=api_key,
+                base_url="https://openrouter.ai/api/v1"
+            )
+            # Default to Gemini 2.5 Pro, but allow any of the supported models
+            self.model = model or "google/gemini-2.5-pro"
+            # Supported models: google/gemini-2.5-pro, openai/gpt-5, anthropic/claude-sonnet-4
+        else:
+            raise ValueError(f"Unsupported provider: {self.provider}. Use 'siliconflow', 'doubao', 'kimi', 'moonshot', or 'openrouter'")
         
         # Initialize memory manager (read-only access)
         self.memory_manager = create_memory_manager(user_id, memory_mode)
@@ -80,7 +111,7 @@ class ConversationalAgent:
         # Initialize system prompt
         self._init_system_prompt()
         
-        logger.info(f"ConversationalAgent initialized for user {user_id}")
+        logger.info(f"ConversationalAgent initialized for user {user_id} with {self.provider} provider using {self.model}")
     
     def _generate_session_id(self) -> str:
         """Generate a unique session ID"""
@@ -90,14 +121,8 @@ class ConversationalAgent:
         """Initialize the system prompt"""
         system_content = """You are a helpful and personalized assistant. You have access to information about the user from previous conversations, which helps you provide personalized and contextual responses.
 
-## Key Behaviors:
-1. Be conversational and natural
-2. Reference relevant user information when appropriate
-3. Maintain consistency with what you know about the user
-4. Be helpful and personalized based on user context
-5. Focus on having a good conversation
-
-User context and memories will be provided with each message."""
+You MUST analyze the context, user's questions and memories in detail, and provide a comprehensive and detailed response.
+"""
 
         self.conversation = [
             {
@@ -120,16 +145,21 @@ User context and memories will be provided with each message."""
             context_parts.append(memory_str)
             context_parts.append("")
         
-        # Add recent conversation history
+        # Add ALL conversation history
         if self.conversation_history:
-            recent = self.conversation_history.get_recent_turns(limit=3)
-            if recent:
-                context_parts.append("=== RECENT CONVERSATIONS ===")
-                for turn in recent:
-                    context_parts.append(f"[{turn.timestamp}]")
-                    context_parts.append(f"User: {turn.user_message[:150]}...")
-                    context_parts.append(f"Assistant: {turn.assistant_message[:150]}...")
+            # Get ALL conversation history, not just recent
+            all_conversations = self.conversation_history.conversations if hasattr(self.conversation_history, 'conversations') else []
+            
+            if all_conversations:
+                context_parts.append("=== FULL CONVERSATION HISTORY ===")
+                context_parts.append(f"Total conversations: {len(all_conversations)}")
                 context_parts.append("")
+                
+                for turn in all_conversations:
+                    context_parts.append(f"[Session: {turn.session_id}, Turn {turn.turn_number}, Time: {turn.timestamp}]")
+                    context_parts.append(f"User: {turn.user_message}")
+                    context_parts.append(f"Assistant: {turn.assistant_message}")
+                    context_parts.append("")
         
         return "\n".join(context_parts)
     
@@ -161,19 +191,39 @@ User context and memories will be provided with each message."""
         else:
             full_message = message
         
+        # Log the full prompt if verbose
+        if self.verbose:
+            logger.info(f"User request: {message}")
+            if memory_context:
+                logger.info(f"Memory context added: {memory_context}")
+            logger.info(f"Full prompt sent to API: {full_message}")
+        
         # Add to conversation
         self.conversation.append({"role": "user", "content": full_message})
         
         try:
-            # Call the model
-            response = self.client.chat.completions.create(
+            # Call the model with streaming
+            stream = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.conversation,
                 temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens
+                max_tokens=self.config.max_tokens,
+                stream=True
             )
             
-            assistant_message = response.choices[0].message.content
+            # Collect streamed response
+            assistant_message = ""
+            if self.verbose:
+                logger.info("Streaming response...")
+                
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    delta = chunk.choices[0].delta.content
+                    assistant_message += delta
+                    # Always stream output to show real-time response
+                    print(delta, end='', flush=True)
+            
+            print()  # New line after streaming
             
             # Add assistant response to conversation
             self.conversation.append({
@@ -190,8 +240,8 @@ User context and memories will be provided with each message."""
                 )
             
             if self.verbose:
-                logger.info(f"User: {message[:100]}...")
-                logger.info(f"Assistant: {assistant_message[:100]}...")
+                logger.info(f"User: {message}")
+                logger.info(f"Assistant: {assistant_message}")
             
             return assistant_message
             

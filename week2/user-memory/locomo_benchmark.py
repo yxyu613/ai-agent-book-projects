@@ -475,6 +475,12 @@ class LOCOMOBenchmark:
                     verbose=False
                 )
                 
+                # CRITICAL: Clear any existing memory for this user before test
+                # This ensures clean test runs even if the same test_id is run multiple times
+                if hasattr(agent, 'memory_manager') and hasattr(agent.memory_manager, 'clear_all_memories'):
+                    agent.memory_manager.clear_all_memories()
+                    logger.info(f"Cleared memory for user {user_id} before test")
+                
                 # Run test
                 result = self.run_single_test(agent, test_case)
                 mode_results.append(result)

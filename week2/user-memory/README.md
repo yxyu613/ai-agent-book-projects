@@ -1,10 +1,10 @@
 # User Memory System with Separated Architecture
 
-A sophisticated memory management system for AI agents with **separated conversation and memory processing**, enabling more flexible and intelligent memory management across sessions.
+A sophisticated memory management system for AI agents with **separated conversation and memory processing**, enabling flexible and intelligent memory management across sessions.
 
-## 🆕 New Architecture (v2.0)
+## 🏗️ Architecture Overview
 
-The system now features a **separated architecture** that decouples conversation handling from memory management:
+The system features a **separated architecture** that decouples conversation handling from memory management:
 
 - **ConversationalAgent**: Focuses purely on natural dialogue with users
 - **BackgroundMemoryProcessor**: Analyzes full conversation context to intelligently update memories
@@ -17,47 +17,71 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
 
 ### 🏗️ Separated Processing Architecture
 - Conversation and memory management are completely decoupled
-- Background thread option for asynchronous memory updates
+- Background thread option for asynchronous memory updates  
 - Manual trigger option for controlled memory processing
 - Full conversation context analysis for better memory decisions
+- Configurable conversation-based processing intervals
 
-### 🧠 Dual Memory Mechanisms
+### 🧠 Multiple Memory Modes
 
-1. **Notes-Based Memory**
+1. **Notes-Based Memory** (`notes`)
    - Maintains a list of textual notes with session references
    - Each note includes content, tags, and source session ID
    - Automatic memory consolidation when limits are reached
    - Simple and interpretable memory structure
 
-2. **JSON Cards Memory**
+2. **Enhanced Notes** (`enhanced_notes`)
+   - Paragraph-based memory with full context
+   - More detailed information retention
+   - Better for complex user information
+
+3. **JSON Cards Memory** (`json_cards`)
    - Hierarchical two-level JSON structure
    - Organized by categories and subcategories
    - Each memory card contains value and session reference
    - Structured for complex information organization
 
-### 🔍 Conversation History Search
+4. **Advanced JSON Cards** (`advanced_json_cards`)
+   - Complete card objects with full metadata
+   - Enhanced structure for complex scenarios
+   - Better conflict resolution and updates
+
+### 🔍 Conversation History Management
+- Session-based conversation storage and retrieval
 - Optional integration with Dify API for vector-based search
 - Fallback to keyword-based search when Dify is unavailable
-- Session-aware conversation retrieval
-- Contextual memory augmentation
+- Contextual memory augmentation from past conversations
 
-### 📊 LOCOMO Benchmark Integration
-- Comprehensive evaluation of memory system effectiveness
+### 📊 Evaluation Framework Integration
+- Comprehensive evaluation mode with structured test cases
+- Three-layer test hierarchy (basic recall, contextual reasoning, cross-session synthesis)
+- Automated scoring and evaluation metrics
+- Integration with user-memory-evaluation framework
+- See [EVALUATION_MODE.md](EVALUATION_MODE.md) for details
+
+### 📈 LOCOMO Benchmark Support
+- Comprehensive benchmark for memory system effectiveness
 - Tests for:
-  - Memory retention
-  - Preference tracking
-  - Context switching
-  - Memory updates
+  - Memory retention across sessions
+  - Preference tracking and usage
+  - Context switching capabilities
+  - Memory update accuracy
   - Multi-session continuity
   - Complex reasoning with memory
   - Temporal awareness
   - Conflict resolution
 
-### 🚀 Kimi K2 Model Integration
-- Powered by Moonshot's Kimi K2 model (kimi-k2-0905-preview)
+### 🚀 Powered by Kimi K2 Model
+- Uses Moonshot's Kimi K2 model (kimi-k2-0905-preview)
 - Streaming response support for real-time interaction
 - Optimized prompting for memory management
-- Separate LLM calls for memory updates
+- Separate LLM calls for memory analysis
+
+### 🛠️ Memory Operations
+- **Add**: Create new memories
+- **Update**: Modify existing memories based on new information
+- **Delete**: Remove outdated or incorrect memories
+- **Search**: Find relevant memories using keywords or semantic search
 
 ## Installation
 
@@ -89,16 +113,16 @@ cp env.example .env
 python quickstart.py
 ```
 
-This will:
-- Create a demo user with notes-based memory
-- Run sample conversations
-- Demonstrate memory persistence across sessions
-- Display the current memory state
+This demonstrates:
+- Separated architecture with conversation and memory processing
+- Sample conversations with memory extraction
+- Memory persistence across sessions
+- Clear display of memory operations
 
 ## Usage
 
-### Interactive Session
-Start an interactive chat session with the new separated architecture:
+### Interactive Mode (Recommended)
+Start an interactive chat session with the separated architecture:
 
 ```bash
 # With background memory processing (default)
@@ -110,8 +134,10 @@ python main.py --mode interactive --user john_doe --conversation-interval 2
 # Without background processing (manual mode)
 python main.py --mode interactive --user john_doe --background-processing False
 
-# With JSON cards memory
-python main.py --mode interactive --user jane_doe --memory-mode json_cards
+# With different memory modes
+python main.py --mode interactive --user jane_doe --memory-mode enhanced_notes
+python main.py --mode interactive --user bob_smith --memory-mode json_cards
+python main.py --mode interactive --user alice_wong --memory-mode advanced_json_cards
 ```
 
 Commands during interactive session:
@@ -121,138 +147,217 @@ Commands during interactive session:
 - `reset` - Start a new conversation session
 - `quit` - Exit the session
 
-### Demo Mode
-Run a comprehensive demonstration:
+### Single Message Mode
+Send a single message and get a response:
 
 ```bash
-python main.py demo
+python main.py --mode single --user alice --message "I work as a data scientist at TechCorp"
 ```
 
-This demonstrates both memory modes with sample conversations.
+### Demo Mode
+Run a comprehensive demonstration of all features:
+
+```bash
+python main.py --mode demo
+```
+
+### Evaluation Mode
+Run structured tests from the evaluation framework:
+
+```bash
+# Interactive evaluation menu
+python evaluation_main.py
+
+# Run specific test
+python evaluation_main.py --mode single --test-id layer1_01_bank_account
+
+# Run all tests in a category
+python evaluation_main.py --mode batch --category layer1
+```
 
 ### Benchmark Mode
-Run the LOCOMO benchmark to evaluate memory effectiveness:
+Run the LOCOMO benchmark:
 
 ```bash
-# Run all tests
-python main.py benchmark
+# Run all benchmark tests
+python main.py --mode benchmark
 
-# Run specific tests
-python main.py benchmark personal_info_retention preference_tracking
+# Run specific test categories
+python main.py --mode benchmark personal_info_retention preference_tracking
 ```
 
-## Architecture
+## Architecture Components
 
 ### Core Components
 
-1. **`agent.py`** - Main agent implementation with Kimi K2 integration
-   - Streaming response handling
-   - Memory-augmented prompting
+1. **`conversational_agent.py`** - Pure conversation handling
+   - Natural dialogue management
+   - Read-only memory access
    - Session management
+   - Context integration
 
-2. **`memory_manager.py`** - Memory management implementations
+2. **`background_memory_processor.py`** - Memory analysis and updates
+   - Full conversation context analysis
+   - Batch processing capabilities
+   - Thread-safe operation
+
+3. **`agent.py`** - Legacy React-pattern agent (kept for compatibility)
+   - Tool-based memory management
+   - Direct memory updates during conversation
+   - Single-turn decision making
+
+4. **`memory_manager.py`** - Memory storage implementations
    - `NotesMemoryManager` - List-based memory
+   - `EnhancedNotesMemoryManager` - Paragraph-based memory
    - `JSONMemoryManager` - Hierarchical JSON memory
+   - `AdvancedJSONMemoryManager` - Full card object memory
    - Base abstract class for extensibility
 
-3. **`conversation_history.py`** - Conversation history management
+5. **`conversation_history.py`** - Conversation management
    - Session-based conversation storage
    - Optional Dify integration for vector search
    - Fallback keyword search
+   - Turn-by-turn tracking
 
-4. **`locomo_benchmark.py`** - LOCOMO benchmark implementation
+6. **`locomo_benchmark.py`** - LOCOMO benchmark implementation
    - Comprehensive test suite
    - Performance metrics
-   - Results analysis
+   - Results analysis and reporting
 
-5. **`config.py`** - Configuration management
+7. **`memory_operation_formatter.py`** - Operation display utilities
+   - Consistent formatting for memory operations
+   - Operation summaries
+
+8. **`config.py`** - Configuration management
    - Environment variable handling
-   - Default settings
-   - Validation
+   - Multiple memory modes
+   - Default settings and validation
 
-## Memory Update Process
+## Memory Processing Flow
 
-1. **Conversation Analysis**: After each user-assistant interaction, the system analyzes the conversation for memorable information.
+### Separated Architecture Flow
 
-2. **LLM-Based Extraction**: A separate LLM call determines what information should be:
-   - Created as new memory
-   - Updated in existing memory
-   - Deleted from memory
+1. **Conversation Phase**: User interacts with ConversationalAgent
+   - Agent reads existing memories for context
+   - Maintains natural conversation flow
+   - Tracks all conversation turns
 
-3. **Memory Persistence**: Updates are immediately saved to disk for persistence across sessions.
+2. **Processing Trigger**: Based on configuration
+   - After N conversation rounds (configurable)
+   - Manual trigger via command
+   - Automatic background processing
 
-4. **Context Integration**: Memory is automatically included in the system prompt for future interactions.
+3. **Analysis Phase**: BackgroundMemoryProcessor analyzes conversation
+   - Reviews entire conversation context
+   - Identifies memorable information
+   - Determines required operations (add/update/delete)
+
+4. **Update Phase**: Memory operations are applied
+   - Operations executed
+   - Memory persistence to disk
+   - Clear operation list output
+
+5. **Integration**: Updated memories available for next conversation
 
 ## Configuration
 
 Key configuration options in `.env`:
 
 ```env
-# Memory Mode Selection
-MEMORY_MODE=notes  # or json_cards
+# API Configuration
+MOONSHOT_API_KEY=your_api_key_here
 
-# Memory Limits
+# Memory Mode Selection
+MEMORY_MODE=notes  # Options: notes, enhanced_notes, json_cards, advanced_json_cards
+
+# Memory Settings
 MAX_MEMORY_ITEMS=100
 MEMORY_UPDATE_TEMPERATURE=0.2
 
+# Processing Configuration
+CONVERSATION_INTERVAL=1  # Process after N conversation rounds
+MIN_CONVERSATION_TURNS=1
+
 # Dify Integration (Optional)
-ENABLE_HISTORY_SEARCH=true
+ENABLE_HISTORY_SEARCH=false
 DIFY_API_KEY=your_dify_key
 DIFY_DATASET_ID=your_dataset_id
 
 # Model Settings
 MODEL_TEMPERATURE=0.3
-MODEL_MAX_TOKENS=2000
+MODEL_MAX_TOKENS=4096
 ```
 
-## Benchmark Results
+## Testing
 
-The LOCOMO benchmark evaluates:
+The project includes comprehensive test suites:
 
-- **Memory Retention**: 
-  - Ability to remember user information
-  - Persistence across sessions
+```bash
+# Test separated architecture flow
+python test_separated_architecture.py
 
-- **Preference Tracking**:
-  - Recording user preferences
-  - Using preferences in recommendations
+# Test all four memory modes
+python test_four_modes.py
 
-- **Context Management**:
-  - Handling topic switches
-  - Maintaining relevant context
+# Test memory operations
+python test_memory_ops.py
 
-- **Memory Updates**:
-  - Correcting outdated information
-  - Resolving conflicts
+# Test evaluation integration
+python test_evaluation_integration.py
 
-Results are saved to `results/locomo/` with detailed metrics:
-- Success rate per test category
-- Average response times
-- Memory operation counts
-- Detailed test breakdowns
+# Test React pattern (legacy)
+python test_react_pattern.py
+
+# Test advanced memory modes
+python test_advanced_mode.py
+```
 
 ## API Reference
 
-### Creating an Agent
+### Creating a Conversational Agent
 
 ```python
-from agent import UserMemoryAgent
+from conversational_agent import ConversationalAgent, ConversationConfig
 from config import MemoryMode
 
-agent = UserMemoryAgent(
+config = ConversationConfig(
+    enable_memory_context=True,
+    temperature=0.7,
+    max_tokens=4096
+)
+
+agent = ConversationalAgent(
     user_id="unique_user_id",
     memory_mode=MemoryMode.NOTES,
-    enable_streaming=True,
-    verbose=False
+    config=config,
+    verbose=True  # Now defaults to True for streaming output
+)
+```
+
+### Creating a Memory Processor
+
+```python
+from background_memory_processor import BackgroundMemoryProcessor, MemoryProcessorConfig
+
+config = MemoryProcessorConfig(
+    conversation_interval=1,
+    update_threshold=0.7,
+    enable_auto_processing=True
+)
+
+processor = BackgroundMemoryProcessor(
+    user_id="unique_user_id",
+    memory_mode=MemoryMode.NOTES,
+    config=config
 )
 ```
 
 ### Streaming Responses
 
 ```python
+# Get streaming response
 for chunk in agent.chat_stream("Hello, I'm Alice"):
-    if chunk['type'] == 'content':
-        print(chunk['content'], end='', flush=True)
+    print(chunk, end='', flush=True)
 ```
 
 ### Memory Operations
@@ -261,11 +366,13 @@ for chunk in agent.chat_stream("Hello, I'm Alice"):
 # Get memory summary
 summary = agent.get_memory_summary()
 
-# Search memories
-results = agent.search_memories("programming languages")
+# Process conversation manually
+results = processor.process_conversation()
+print(f"Operations: {results['operations']}")
+print(f"Summary: {results['summary']}")
 
-# Start new session
-session_id = agent.start_session()
+# Search memories
+results = processor.search_relevant_memories("programming languages")
 ```
 
 ## Extending the System
@@ -281,15 +388,17 @@ session_id = agent.start_session()
    - `delete_memory()`
    - `get_context_string()`
    - `search_memories()`
+   - `get_summary()`
 
 3. Register in `create_memory_manager()` factory function
+4. Add to MemoryMode enum in config.py
 
 ### Custom Embedding Search
 
 Replace `SimpleEmbeddingSearch` in `conversation_history.py` with:
 - Sentence transformers
 - Custom embedding models
-- External vector databases
+- External vector databases (Pinecone, Weaviate, etc.)
 
 ## Troubleshooting
 
@@ -303,9 +412,10 @@ Replace `SimpleEmbeddingSearch` in `conversation_history.py` with:
    - Check write permissions for `data/` directory
    - Verify `MEMORY_STORAGE_DIR` path exists
 
-3. **Streaming Not Working**
-   - Ensure `enable_streaming=True` when creating agent
-   - Check terminal supports flush output
+3. **Processing Not Triggering**
+   - Check `conversation_interval` setting
+   - Use `process` command to manually trigger
+   - Verify background processing is enabled
 
 4. **Dify Search Not Working**
    - Verify `DIFY_API_KEY` and `DIFY_DATASET_ID`
@@ -314,10 +424,35 @@ Replace `SimpleEmbeddingSearch` in `conversation_history.py` with:
 ## Performance Considerations
 
 - **Memory Size**: Keep `MAX_MEMORY_ITEMS` reasonable (50-200)
-- **Update Frequency**: Memory updates happen after each turn
+- **Update Frequency**: Balance between immediacy and efficiency
 - **Context Length**: Monitor `MAX_CONTEXT_LENGTH` for token limits
-- **Streaming**: Enable for better user experience
-- **Search**: Dify integration improves search quality but adds latency
+- **Processing Interval**: Adjust based on conversation patterns
+
+## Project Structure
+
+```
+user-memory/
+├── main.py                          # Main entry point
+├── quickstart.py                    # Quick demonstration
+├── conversational_agent.py         # Conversation handling
+├── background_memory_processor.py  # Memory processing
+├── agent.py                        # Legacy React agent
+├── memory_manager.py               # Memory storage
+├── conversation_history.py         # History management
+├── memory_operation_formatter.py   # Operation formatting
+├── config.py                       # Configuration
+├── locomo_benchmark.py             # Benchmark implementation
+├── evaluation_main.py              # Evaluation mode entry
+├── integrated_evaluation.py        # Evaluation integration
+├── test_*.py                       # Test suites
+├── ARCHITECTURE.md                 # Architecture details
+├── EVALUATION_MODE.md              # Evaluation documentation
+├── requirements.txt                # Dependencies
+├── env.example                     # Environment template
+└── data/                          # Storage directories
+    ├── memories/                  # Memory files
+    └── conversations/             # Conversation histories
+```
 
 ## License
 
@@ -328,3 +463,4 @@ This project is part of the AI Agent practical training course.
 - Moonshot AI for the Kimi K2 model
 - LOCOMO benchmark for evaluation framework
 - Dify for vector search capabilities
+- User Memory Evaluation Framework for structured testing

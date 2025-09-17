@@ -35,7 +35,6 @@ A separate processor that:
 
 **Key Features:**
 - Analyzes entire conversation context holistically
-- Confidence-based update decisions
 - Supports both manual and automatic processing
 - Thread-safe background operation
 
@@ -82,7 +81,6 @@ This starts an interactive session where:
 - Conversations happen in real-time
 - Memory updates are processed after each conversation round (configurable)
 - User can chat naturally without waiting for memory operations
-- Memory operations are clearly listed with confidence scores
 
 ### Single Conversation Mode
 
@@ -120,7 +118,6 @@ MemoryProcessorConfig(
     conversation_interval=1,       # Process after N conversation rounds
     min_conversation_turns=1,      # Minimum turns before processing
     context_window=10,             # Recent turns to analyze
-    update_threshold=0.7,          # Confidence threshold for updates
     enable_auto_processing=True,   # Enable background thread
     output_operations=True         # Output detailed operation list
 )
