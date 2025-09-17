@@ -12,46 +12,44 @@ This project provides an interactive way to understand how language models alloc
 
 ## Architecture
 
-The system follows a simple architecture similar to the attention-hallucination-detection project:
+The system follows a simple architecture:
 1. **Agent generates trajectories**: Run `agent.py` or `main.py` to generate new trajectories
 2. **JSON storage**: Each trajectory is saved as a unique JSON file in `frontend/public/trajectories/`
 3. **Frontend visualization**: React app loads and displays all trajectories with tab navigation
 
 ## Quick Start
 
-### Option 1: Using the Start Script (Recommended)
+The visualization process is now split into two manual steps: generating trajectories and viewing them in the frontend.
+
+### Step 1: Generate Trajectories
+
+Choose one of the following options to generate trajectory data:
 
 ```bash
-./start.sh
-```
+# Option A: Run basic attention tracking demo
+python agent.py
 
-This script will:
-1. Check for existing trajectories
-2. Run a demo if no trajectories exist
-3. Install frontend dependencies (if needed)
-4. Start the development server
-
-Then visit http://localhost:3000 to view the visualizations.
-
-### Option 2: Manual Setup
-
-1. **Generate trajectories:**
-```bash
-# run the ReAct agent with tool use
+# Option B: Run ReAct agent with tool calling (demonstrates multi-step reasoning)
 python main.py
 ```
 
-Each run creates a new trajectory file with a unique timestamp.
+Each run creates a new trajectory file with a unique timestamp in `frontend/public/trajectories/`.
 
-2. **Start the frontend:**
+### Step 2: Start the Frontend
+
+In a separate terminal, start the frontend server:
+
 ```bash
 cd frontend
 npm install  # First time only
 npm run dev
 ```
 
-3. **Open your browser:**
-Navigate to http://localhost:3000
+### Step 3: View Visualizations
+
+Open your browser and navigate to http://localhost:3000
+
+You can keep the frontend running and generate new trajectories in the first terminal - they'll automatically appear in the interface.
 
 ## Project Structure
 
@@ -61,24 +59,38 @@ attention_visualization/
 ├── main.py               # ReAct agent with tool calling
 ├── tools.py              # Tool implementations
 ├── visualization.py      # Visualization utilities
-├── frontend/             # Next.js frontend
-│   ├── pages/           # React pages
-│   ├── components/      # Visualization components
+├── config.py            # Configuration settings
+├── requirements.txt     # Python dependencies
+├── env.example          # Environment variable template
+├── frontend/            # Next.js frontend
+│   ├── pages/          # React pages
+│   ├── components/     # Visualization components
 │   └── public/
 │       └── trajectories/  # Stored trajectory JSONs
 │           ├── trajectory_YYYYMMDD_HHMMSS.json
 │           └── manifest.json  # Index of all trajectories
-└── start.sh             # Quick start script
+└── attention_data/      # Additional trajectory storage
 ```
 
 ## How It Works
 
 ### 1. Trajectory Generation
-When you run `main.py`:
-- The agent processes various test queries
-- Attention weights are captured at each generation step
-- Results are saved to `frontend/public/trajectories/` with unique timestamps
-- A manifest file tracks all available trajectories
+
+#### Using `agent.py`
+- Runs a basic attention tracking demo with various query types
+- Captures attention weights for single-step responses
+- Good for understanding basic attention patterns
+
+#### Using `main.py`
+- Implements a ReAct agent with tool calling capabilities
+- Demonstrates multi-step reasoning with structured thought process
+- Shows how attention shifts when the agent uses tools
+- Better for understanding complex reasoning patterns
+
+Both scripts:
+- Generate unique trajectory files with timestamps
+- Save results to `frontend/public/trajectories/`
+- Update the manifest file for frontend discovery
 
 ### 2. Data Format
 Each trajectory JSON contains:
@@ -168,12 +180,18 @@ result = agent.generate_with_attention(
 
 1. **Clone the repository**
 
-2. **Install Python dependencies:**
+2. **Set up environment variables (optional):**
+```bash
+cp env.example .env
+# Edit .env to customize model, device, and visualization settings
+```
+
+3. **Install Python dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-3. **Install frontend dependencies:**
+4. **Install frontend dependencies:**
 ```bash
 cd frontend
 npm install
@@ -181,10 +199,34 @@ npm install
 
 ## Tips
 
-- **Generate Multiple Runs**: Run the agent multiple times to compare different trajectories
-- **Compare Responses**: Use the tab interface to compare how the model handles similar queries
-- **Analyze Patterns**: Look for attention patterns in different query types
-- **Performance**: First run downloads the model (~1-2GB). GPU/MPS recommended for speed.
+- **First Time Setup**: The initial run will download the model (1~2 GB). GPU/MPS recommended for better performance
+- **Generate Multiple Runs**: Run both `agent.py` and `main.py` to see different attention patterns
+- **Compare Trajectories**: Use the tab interface to compare how the model handles similar queries
+- **Tool vs. No-Tool**: Compare `main.py` (with tools) vs `agent.py` (without tools) to see how tool use affects attention
+- **Analyze Patterns**: Look for attention focus differences in:
+  - Math calculations
+  - Knowledge queries
+  - Reasoning tasks
+  - Code generation
+  - Creative writing
+- **Frontend Auto-Discovery**: The frontend automatically detects new trajectories via the manifest file
+
+## Troubleshooting
+
+### No trajectories showing in frontend
+1. Ensure you've run either `agent.py` or `main.py` at least once
+2. Check that trajectory files exist in `frontend/public/trajectories/`
+3. Verify `manifest.json` is present and contains trajectory entries
+
+### Frontend not starting
+1. Ensure Node.js is installed (version 14+)
+2. Run `npm install` in the frontend directory
+3. Check for port conflicts (default port 3000)
+
+### Slow generation
+- First run downloads the model (1~2 GB)
+- Use GPU/MPS if available for faster generation
+- Set smaller `max_new_tokens` in test queries for quicker demos
 
 ## Notes
 
@@ -192,3 +234,4 @@ npm install
 - The manifest keeps track of the last 50 trajectories
 - Trajectories persist between sessions
 - The frontend automatically discovers new trajectories via the manifest
+- Both `agent.py` and `main.py` can be run multiple times to generate different trajectories
